@@ -2,16 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#0a1628">
   <title>Japan Trip Planner 🗼 — YYZ → Tokyo · October</title>
   <meta name="description" content="Interactive Japan itinerary planner — Tokyo, Hakone, Kyoto, Osaka. Budget slider, train times, hotel picks, restaurant guides.">
   <!-- React + Babel from CDN (no build step needed) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{ box-sizing:border-box; }
+    body{ overflow-x:hidden !important; background:#f8faff; }
+    #root{ min-height:100vh; }
+    /* Stack all 2-col grids on narrow screens */
+    @media(max-width:560px){
+      [style*="gridTemplateColumns"]{
+        grid-template-columns: 1fr !important;
+      }
+      [style*="minmax(260px"]{
+        grid-template-columns: 1fr !important;
+      }
+      [style*="minmax(280px"]{
+        grid-template-columns: 1fr !important;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+    <div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#4a5a7a;flex-direction:column;gap:12px"><div style="width:36px;height:36px;border:3px solid #e8f0ff;border-top-color:#0057FF;border-radius:50%;animation:s 0.8s linear infinite"></div><div style="font-size:13px;font-weight:500">Loading Japan Planner…</div><style>@keyframes s{to{transform:rotate(360deg)}}</style></div></div>
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
@@ -574,7 +592,7 @@ function FlightPanel({ port, ap, label, dir, flightNum, setFlightNum, flightTime
   const hotelLeaveBy = latestSafe ? fromMins(toMins(latestSafe.time)-20) : null; // 20min to get to station
 
   return (
-    <div className="card" style={{padding:"18px 20px",borderTop:`4px solid #0057FF`}}>
+    <div className="card" style={{padding:"clamp(12px,3vw,18px) clamp(12px,3vw,20px)",borderTop:`4px solid #0057FF`}}>
       <div style={{fontSize:11,fontWeight:700,color:"#0057FF",letterSpacing:1,marginBottom:10}}>{label} — {dir}</div>
       <div style={{fontSize:15,fontWeight:800,marginBottom:2}}>{port} — {ap.name}</div>
       <div style={{fontSize:11,color:"var(--gray400)",marginBottom:12}}>{ap.desc} · {ap.flightNote}</div>
@@ -699,7 +717,24 @@ function LeafletMap({city}) {
       const c=SC[s.type]||"#333", e=SE[s.type]||"📍";
       return `L.marker([${s.lat},${s.lng}],{icon:L.divIcon({className:'',html:'<div style="background:white;border:2.5px solid ${c};border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 12px ${c}55">${e}</div>',iconSize:[34,34],iconAnchor:[17,17]})}).addTo(map).bindPopup('<div style="font-family:DM Sans,sans-serif;padding:2px"><b style="font-size:13px">${s.name}</b><br><span style="font-size:10px;color:${c};text-transform:capitalize">${s.type}</span></div>');`;
     }).join("");
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script><style>*{margin:0;padding:0}html,body,#m{width:100%;height:100%}.leaflet-popup-content-wrapper{background:#fff;border:none;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.12)}.leaflet-popup-tip{background:#fff}.leaflet-control-zoom a{background:#fff!important;color:#0057FF!important;border-color:#e8f0ff!important;border-radius:8px!important;margin-bottom:4px}.leaflet-control-zoom{border:none!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}.leaflet-control-attribution{background:rgba(255,255,255,.8)!important;font-size:8px!important;border-radius:8px!important}</style></head><body><div id="m"></div><script>var map=L.map('m',{center:[${mapData.lat},${mapData.lng}],zoom:${mapData.zoom},zoomControl:true});L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CartoDB'}).addTo(map);${markers}<\/script></body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script><style>*{margin:0;padding:0}html,body,#m{width:100%;height:100%}.leaflet-popup-content-wrapper{background:#fff;border:none;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.12)}.leaflet-popup-tip{background:#fff}.leaflet-control-zoom a{background:#fff!important;color:#0057FF!important;border-color:#e8f0ff!important;border-radius:8px!important;margin-bottom:4px}.leaflet-control-zoom{border:none!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}.leaflet-control-attribution{background:rgba(255,255,255,.8)!important;font-size:8px!important;border-radius:8px!important}</style>  <style>
+    *{ box-sizing:border-box; }
+    body{ overflow-x:hidden !important; background:#f8faff; }
+    #root{ min-height:100vh; }
+    /* Stack all 2-col grids on narrow screens */
+    @media(max-width:560px){
+      [style*="gridTemplateColumns"]{
+        grid-template-columns: 1fr !important;
+      }
+      [style*="minmax(260px"]{
+        grid-template-columns: 1fr !important;
+      }
+      [style*="minmax(280px"]{
+        grid-template-columns: 1fr !important;
+      }
+    }
+  </style>
+</head><body><div id="m"></div><script>var map=L.map('m',{center:[${mapData.lat},${mapData.lng}],zoom:${mapData.zoom},zoomControl:true});L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CartoDB'}).addTo(map);${markers}<\/script></body></html>`;
   },[city]);
   return <iframe srcDoc={html} style={{width:"100%",height:"100%",border:"none",borderRadius:"inherit"}} title="map" sandbox="allow-scripts"/>;
 }
@@ -850,7 +885,7 @@ function App() {
         <div className="orb" style={{width:600,height:600,background:"radial-gradient(circle,rgba(0,87,255,0.35),transparent 70%)",top:-200,left:-100,animationDelay:"0s"}}/>
         <div className="orb" style={{width:500,height:500,background:"radial-gradient(circle,rgba(99,102,241,0.25),transparent 70%)",top:-100,right:-50,animationDelay:"3s"}}/>
         <div className="orb" style={{width:300,height:300,background:"radial-gradient(circle,rgba(0,196,140,0.15),transparent 70%)",bottom:-100,left:"40%",animationDelay:"5s"}}/>
-        <div style={{position:"relative",zIndex:1,maxWidth:900,margin:"0 auto",padding:"28px 24px 0"}}>
+        <div style={{position:"relative",zIndex:1,maxWidth:900,margin:"0 auto",padding:"clamp(16px,4vw,28px) clamp(12px,4vw,24px) 0"}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(0,87,255,0.25)",border:"1px solid rgba(0,87,255,0.4)",borderRadius:100,padding:"6px 14px",marginBottom:20}}>
             <div style={{width:6,height:6,borderRadius:"50%",background:"#007a57"}}/>
             <span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.85)",letterSpacing:0.8}}>YYZ → JAPAN · OCTOBER · 2 ADULTS</span>
@@ -883,12 +918,12 @@ function App() {
         </div>
       </div>
 
-      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 60px"}}>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"clamp(12px,4vw,28px) clamp(12px,4vw,24px) 60px"}}>
 
         {/* ── FLIGHT TIMES ── */}
         <div className="card" style={{padding:24,marginBottom:20}}>
           <div className="section-label">✈️ Flight Times — YYZ ↔ Tokyo</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,260px),1fr))",gap:12,marginBottom:16}}>
             <FlightPanel port={entryPort} ap={entryAp} label="🛬 Fly In" dir="YYZ → Tokyo"
               flightNum={arrFlightNum} setFlightNum={setArrFlightNum}
               flightTime={arrivalTime} setFlightTime={setArrivalTime}
@@ -899,7 +934,7 @@ function App() {
               isArrival={false} tier={tier}/>
           </div>
           {/* Airport selector pills */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,260px),1fr))",gap:10}}>
             <div>
               <div style={{fontSize:11,fontWeight:600,color:"var(--gray600)",marginBottom:8}}>Entry Airport</div>
               <div style={{display:"flex",gap:8}}>
@@ -986,7 +1021,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:16}}>
             {CITY_ORDER.map(city=>{
               const n=cityNights[city]||0, cc=CC[city];
               return(
@@ -1015,7 +1050,7 @@ function App() {
         <div style={{display:"flex",gap:4,background:"white",borderRadius:14,padding:6,marginBottom:20,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)",overflowX:"auto"}}>
           {TABS.map(tab=>(
             <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
-              style={{flex:1,padding:"10px 8px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600,transition:"all 0.25s",whiteSpace:"nowrap",background:activeTab===tab.id?tc.h:"transparent",color:activeTab===tab.id?"white":"var(--gray400)"}}>
+              style={{flex:1,padding:"8px 6px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:"clamp(10px,2.5vw,12px)",fontWeight:600,transition:"all 0.25s",whiteSpace:"nowrap",background:activeTab===tab.id?tc.h:"transparent",color:activeTab===tab.id?"white":"var(--gray400)"}}>
               {tab.icon} {tab.label}
             </button>
           ))}
@@ -1045,7 +1080,7 @@ function App() {
           return(
             <div className="fade-up">
               <div style={{borderRadius:20,overflow:"hidden",marginBottom:16,boxShadow:"var(--shadow-lg)",border:`1px solid ${cc}20`}}>
-                <div style={{background:`linear-gradient(135deg,${cc}ee,${cc}bb)`,padding:"24px 24px 20px"}}>
+                <div style={{background:`linear-gradient(135deg,${cc}ee,${cc}bb)`,padding:"clamp(16px,4vw,24px)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",gap:14,alignItems:"center"}}>
                       <div style={{width:56,height:56,borderRadius:16,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,backdropFilter:"blur(8px)"}}>{sel.template.emoji}</div>
@@ -1322,7 +1357,7 @@ function App() {
                 </div>
               ))}
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,260px),1fr))",gap:8}}>
               {(CITY_MAPS[mapCity]?.spots||[]).map((spot,i)=>(
                 <div key={i} className="card" style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px"}}>
                   <div style={{width:36,height:36,borderRadius:10,background:`${{hotel:"#0057FF",temple:"#92600a",attraction:"#9333ea",nature:"#007a57",train:"#b91c1c"}[spot.type]}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
@@ -1342,11 +1377,11 @@ function App() {
         {activeTab==="trains"&&(
           <div className="fade-up">
             <div className="section-label">✈️ YYZ ↔ Tokyo Flights</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,260px),1fr))",gap:12,marginBottom:24}}>
               {[{label:"🛬 Fly In",port:entryPort,ap:entryAp,dir:"YYZ → Tokyo",time:arrivalTime},{label:"🛫 Fly Out",port:exitPort,ap:exitAp,dir:"Tokyo → YYZ",time:departureTime}].map(item=>{
                 const info=item.ap.toCity[tier];
                 return(
-                  <div key={item.label} className="card" style={{padding:"18px 20px",borderTop:"4px solid #0057FF"}}>
+                  <div key={item.label} className="card" style={{padding:"clamp(12px,3vw,18px) clamp(12px,3vw,20px)",borderTop:"4px solid #0057FF"}}>
                     <div style={{fontSize:11,fontWeight:700,color:"#0057FF",letterSpacing:1,marginBottom:8}}>{item.label} — {item.dir}</div>
                     <div style={{fontSize:15,fontWeight:800,marginBottom:2}}>{item.port} — {item.ap.name}</div>
                     <div style={{fontSize:11,color:"var(--gray400)",marginBottom:6}}>{item.ap.desc}</div>
@@ -1429,7 +1464,7 @@ function App() {
             </div>
 
             {/* JR Pass */}
-            <div style={{background:tier==="budget"?"#fff8e6":"#e8f0ff",border:`1.5px solid ${tier==="budget"?"#92600a40":"#0057FF30"}`,borderRadius:14,padding:"16px 20px",marginBottom:24}}>
+            <div style={{background:tier==="budget"?"#fff8e6":"#e8f0ff",border:`1.5px solid ${tier==="budget"?"#92600a40":"#0057FF30"}`,borderRadius:14,padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",marginBottom:24}}>
               <div style={{fontWeight:700,color:tier==="budget"?"#92600a":"#0057FF",marginBottom:6,fontSize:14}}>
                 {tier==="budget"?"⚠️ No JR Pass — paying per train":"✅ 14-day JR Pass covers all Shinkansen"}
               </div>
@@ -1440,7 +1475,7 @@ function App() {
 
             {/* Outbound */}
             <div className="section-label">🚄 Outbound Journey</div>
-            <div style={{background:"white",borderRadius:16,padding:"16px 20px",marginBottom:12,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)"}}>
+            <div style={{background:"white",borderRadius:16,padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",marginBottom:12,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)"}}>
               <div style={{fontSize:11,color:"var(--gray400)",marginBottom:12,fontWeight:600}}>YYZ ──✈──▶ {entryPort} → {active.join(" → ")}</div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 {active.map((city,i)=>{
@@ -1466,7 +1501,7 @@ function App() {
               if(!tr) return null;
               const pp=tr.perPerson[tier];
               return(
-                <div key={city} className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:`4px solid ${tr.color}`}}>
+                <div key={city} className="card" style={{padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",marginBottom:10,borderLeft:`4px solid ${tr.color}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -1516,7 +1551,7 @@ function App() {
               return(
                 <div style={{marginTop:8}}>
                   <div className="section-label" style={{marginTop:24}}>🏠 Return — {lastCity} → {exitPort} → YYZ</div>
-                  <div className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:`4px solid ${retTr.color}`}}>
+                  <div className="card" style={{padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",marginBottom:10,borderLeft:`4px solid ${retTr.color}`}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -1598,7 +1633,7 @@ function App() {
                       </div>
                     </div>
                   </div>
-                  <div className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:"4px solid #0057FF"}}>
+                  <div className="card" style={{padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",marginBottom:10,borderLeft:"4px solid #0057FF"}}>
                     <div style={{fontSize:13,fontWeight:700,color:"#0057FF",marginBottom:6}}>🚌 Tokyo City → {exitPort} — {exitInfo.mode}</div>
                     <div style={{fontSize:12,color:"var(--gray600)",marginBottom:10}}>⏱ {exitInfo.dur} · then check in for YYZ flight</div>
                     <div style={{background:"#fff2f2",borderRadius:10,padding:"10px 14px",border:"1px solid #b91c1c30"}}>
@@ -1610,7 +1645,7 @@ function App() {
                       <span style={{fontSize:22,fontWeight:900,color:"#0057FF"}}>${exitInfo.cost*2}</span>
                     </div>
                   </div>
-                  <div style={{background:"linear-gradient(135deg,#0057FF18,#0057FF08)",border:"1.5px solid #0057FF30",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{background:"linear-gradient(135deg,#0057FF18,#0057FF08)",border:"1.5px solid #0057FF30",borderRadius:14,padding:"clamp(10px,3vw,16px) clamp(12px,3vw,20px)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:600,color:"var(--gray600)"}}>Total return journey · 2 adults</div>
                       <div style={{fontSize:11,color:"var(--gray400)",marginTop:2}}>{lastCity} → Tokyo → {exitPort}</div>
@@ -1623,7 +1658,7 @@ function App() {
             })()}
 
             {/* Transport summary */}
-            <div className="card" style={{padding:"18px 20px",marginTop:20}}>
+            <div className="card" style={{padding:"clamp(12px,3vw,18px) clamp(12px,3vw,20px)",marginTop:20}}>
               <div className="section-label">📊 Full Transport Summary · 2 Adults</div>
               {[
                 {label:`🛬 ${entryPort} arrival transfer`,val:entryAp.toCity[tier].cost*2,color:"#0057FF"},
