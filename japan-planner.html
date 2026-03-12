@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Japan Trip Planner 🗼 — YYZ → Tokyo · October</title>
+  <meta name="description" content="Interactive Japan itinerary planner — Tokyo, Hakone, Kyoto, Osaka. Budget slider, train times, hotel picks, restaurant guides.">
+  <!-- React + Babel from CDN (no build step needed) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+
+
+/* ─── FONTS & CSS ────────────────────────────────────────────────────────────*/
+const FONTS = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:#0a1628; --navy2:#0f1f3d; --blue:#0057FF; --sky:#e8f0ff;
+    --white:#ffffff; --gray50:#f8faff; --gray100:#eef2fb; --gray200:#dde5f7;
+    --gray400:#4a5a7a; --gray600:#4a5a80; --text:#0a1628;
+    --shadow:0 4px 24px rgba(0,40,120,0.10); --shadow-lg:0 12px 48px rgba(0,40,120,0.18);
+    --transition:0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  body { font-family:'DM Sans',sans-serif; background:var(--gray50); color:var(--text); }
+  button,input,select { font-family:'DM Sans',sans-serif; }
+  input[type=range]{-webkit-appearance:none;appearance:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#0057FF;border:3px solid white;box-shadow:0 2px 8px rgba(0,87,255,0.4);cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;}
+  input[type=time]{border:2px solid var(--gray200);border-radius:10px;padding:8px 12px;font-size:14px;color:var(--text);background:white;cursor:pointer;outline:none;transition:border-color 0.2s;}
+  input[type=time]:focus{border-color:#0057FF;}
+  input[type=text]{border:2px solid var(--gray200);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--text);background:white;outline:none;transition:border-color 0.2s;width:100%;}
+  input[type=text]:focus{border-color:#0057FF;}
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-track{background:var(--gray100);border-radius:3px;}
+  ::-webkit-scrollbar-thumb{background:var(--gray200);border-radius:3px;}
+  .orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;animation:pulse 8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fade-up{animation:fadeUp 0.45s ease both;}
+  .card{background:white;border-radius:16px;box-shadow:var(--shadow);border:1px solid var(--gray100);transition:box-shadow var(--transition);}
+  .card:hover{box-shadow:var(--shadow-lg);}
+  .glass{background:rgba(255,255,255,0.7);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.8);}
+  .section-label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray400);margin-bottom:16px;}
+  .spinner{width:18px;height:18px;border:2px solid var(--gray200);border-top-color:#0057FF;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;}
+`;
+
+/* ─── CONSTANTS ──────────────────────────────────────────────────────────────*/
+const TIER_COLORS = {
+  budget:  {h:"#007a57",hbg:"#e6faf4"},
+  mid:     {h:"#0057FF",hbg:"#e8f0ff"},
+  premium: {h:"#92600a",hbg:"#fff8e6"},
+  luxury:  {h:"#9333ea",hbg:"#f5e8ff"},
+};
+const TIER_META = {
+  budget:  {label:"Backpacker",icon:"🎒",sub:"Capsule hotels & conbini",budgetVal:2500},
+  mid:     {label:"Comfort",   icon:"✈️", sub:"Business hotels & JR Pass",budgetVal:5500},
+  premium: {label:"Premium",  icon:"🥂",sub:"4-star hotels & private guides",budgetVal:8500},
+  luxury:  {label:"Luxury",   icon:"👘",sub:"Aman & Michelin dining",budgetVal:12000},
+};
+const getTier = b => b<4000?"budget":b<7000?"mid":b<10000?"premium":"luxury";
+const CC = {Tokyo:"#0057FF",Hakone:"#007a57",Kyoto:"#9333ea",Osaka:"#92600a"};
+const CE = {Tokyo:"🗼",Hakone:"🗻",Kyoto:"🎋",Osaka:"🏯"};
+const CITY_ORDER = ["Tokyo","Hakone","Kyoto","Osaka"];
+
+const AIRPORTS = {
+  NRT:{name:"Narita International",code:"NRT",desc:"60 km from Tokyo centre",
+    flightNote:"Air Canada AC61 & JAL JL72 — YYZ→NRT direct (~14h)",
+    flightIn:{ac:"AC61",jl:"JL72",depYYZ:"13:20",arrNRT:"15:55+1"},
+    flightOut:{ac:"AC62",jl:"JL71",depNRT:"17:30",arrYYZ:"14:05"},
+    toCity:{
+      budget:{cost:16,dur:"1h 15m",mode:"Narita Express (NEX) — ¥3,070",trains:["06:44","07:44","08:44","09:44","10:44","11:44","12:44","13:44","14:44","15:44","16:44","17:44","18:44","19:44","20:44","21:44"]},
+      mid:{cost:28,dur:"55m",mode:"N'EX Reserved — Platform B2",trains:["06:44","07:44","08:44","09:44","10:44","11:44","12:44","13:44","14:44","15:44","16:44","17:44","18:44","19:44","20:44","21:44"]},
+      premium:{cost:28,dur:"55m",mode:"N'EX Reserved + taxi to hotel",trains:["06:44","07:44","08:44","09:44","10:44","11:44","12:44","13:44","14:44","15:44","16:44","17:44","18:44","19:44","20:44","21:44"]},
+      luxury:{cost:90,dur:"45m",mode:"Private car / limo service",trains:["On-demand — pre-book 48h ahead"]},
+    }
+  },
+  HND:{name:"Haneda International",code:"HND",desc:"14 km from Tokyo centre",
+    flightNote:"Air Canada AC35 seasonal — YYZ→HND direct (~13.5h)",
+    flightIn:{ac:"AC35",jl:"",depYYZ:"01:20",arrHND:"04:55+1"},
+    flightOut:{ac:"AC36",jl:"",depHND:"22:55",arrYYZ:"19:30"},
+    toCity:{
+      budget:{cost:5,dur:"30m",mode:"Keikyu Airport Line — ¥640",trains:["05:16","05:32","05:48","06:10","06:26","06:48","07:06","07:22","07:44","08:06","08:22","08:44","09:06","09:22","09:44","10:06","10:22","10:44","11:06","11:44","12:06","12:44","13:06","13:44","14:06","14:44","15:06","15:44","16:06","16:44","17:06","17:44","18:06","18:44","19:06","19:44","20:06","20:44","21:06","21:44","22:06","22:44","23:06","23:44"]},
+      mid:{cost:8,dur:"25m",mode:"Tokyo Monorail → Hamamatsucho",trains:["05:28","05:52","06:16","06:34","06:52","07:10","07:28","07:46","08:04","08:22","08:40","08:58","09:16","09:34","09:52","10:10","10:28","10:46","11:04","11:22","11:40","11:58","12:16","12:34","12:52","13:10","13:28","13:46","14:04","14:22","14:40","14:58","15:16","15:34","15:52","16:10","16:28","16:46","17:04","17:22","17:40","17:58","18:16","18:34","18:52","19:10","19:28","19:46","20:04","20:22","20:40","20:58","21:16","21:34","21:52","22:10","22:28","22:46","23:04","23:22","23:40"]},
+      premium:{cost:8,dur:"25m",mode:"Tokyo Monorail + taxi",trains:["05:28","06:16","07:10","08:04","08:58","09:52","10:46","11:40","12:34","13:28","14:22","15:16","16:10","17:04","17:58","18:52","19:46","20:40","21:34","22:28","23:22"]},
+      luxury:{cost:55,dur:"20m",mode:"Private car — door to door",trains:["On-demand — pre-book 48h ahead"]},
+    }
+  }
+};
+
+const TRANSITIONS = {
+  "Tokyo→Hakone":{line:"Odakyu Romancecar",dur:"85m",color:"#007a57",perPerson:{budget:29,mid:45,premium:55,luxury:55},note:{budget:"Pay per ride",mid:"Reserved seat",premium:"Reserved + taxi",luxury:"Private car"},trains:["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"]},
+  "Tokyo→Kyoto": {line:"Nozomi Shinkansen",dur:"2h 15m",color:"#0057FF",perPerson:{budget:95,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},trains:["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30"]},
+  "Tokyo→Osaka": {line:"Nozomi Shinkansen",dur:"2h 30m",color:"#0057FF",perPerson:{budget:100,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},trains:["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","20:00"]},
+  "Hakone→Kyoto":{line:"Shinkansen via Odawara",dur:"2h 20m",color:"#0057FF",perPerson:{budget:88,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},trains:["07:30","08:30","09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30","18:30"]},
+  "Hakone→Osaka":{line:"Shinkansen via Odawara",dur:"2h 45m",color:"#0057FF",perPerson:{budget:95,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},trains:["07:30","08:30","09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30"]},
+  "Kyoto→Osaka": {line:"JR Special Rapid",dur:"30m",color:"#92600a",perPerson:{budget:7,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},trains:["06:00","06:30","07:00","07:15","07:30","07:45","08:00","08:15","08:30","08:45","09:00","09:15","09:30","09:45","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00"]},
+};
+const RETURN_TRAINS = {
+  Osaka:  {line:"Nozomi Shinkansen",dur:"2h 30m",color:"#0057FF",perPerson:{budget:100,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},tips:{NRT:"Nozomi to Tokyo Stn → NEX to NRT. ~3h 45m total — allow 5h.",HND:"Nozomi to Shinagawa → Keikyu to HND. ~3h — allow 3h 30m."},trains:["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"]},
+  Kyoto:  {line:"Nozomi Shinkansen",dur:"2h 15m",color:"#0057FF",perPerson:{budget:95,mid:0,premium:0,luxury:0},note:{budget:"Pay per ride",mid:"✓ JR Pass",premium:"✓ JR Pass",luxury:"✓ JR Pass"},tips:{NRT:"Nozomi to Tokyo Stn → NEX to NRT. ~3h 30m total — allow 4h 30m.",HND:"Nozomi to Shinagawa → Keikyu to HND. ~2h 45m — allow 3h 15m."},trains:["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"]},
+  Hakone: {line:"Odakyu + Shinkansen",dur:"~2h",color:"#007a57",perPerson:{budget:80,mid:45,premium:55,luxury:55},note:{budget:"Pay per ride",mid:"Odakyu + JR Pass",premium:"Odakyu + JR Pass",luxury:"Private car"},tips:{NRT:"Odakyu to Odawara → Shinkansen to Tokyo → NEX to NRT. ~3h 15m — allow 4h.",HND:"Odakyu to Odawara → Shinkansen to Shinagawa → Keikyu to HND. ~2h 30m — allow 3h."},trains:["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"]},
+};
+const getTr = (from,to) => TRANSITIONS[`${from}→${to}`]||null;
+
+/* ─── TIME HELPERS ───────────────────────────────────────────────────────────*/
+const toMins = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+const fromMins = m => { const h=Math.floor(((m%1440)+1440)%1440/60), mn=((m%1440)+1440)%1440%60; return `${String(h).padStart(2,"0")}:${String(mn).padStart(2,"0")}`; };
+const addMins = (t,d) => fromMins(toMins(t)+d);
+const parseDurMins = dur => {
+  let total=0;
+  const hm=dur.match(/(\d+)h/); if(hm) total+=parseInt(hm[1])*60;
+  const mm=dur.match(/(\d+)m/); if(mm) total+=parseInt(mm[1]);
+  return total||60;
+};
+// Return next N trains at or after afterTime, with arrival time and status
+const getNextTrains = (trains, afterTime, durMins, n=3) => {
+  if(!trains||!trains.length) return [];
+  if(trains[0]==="On-demand — pre-book 48h ahead") return [{time:"On-demand",arrive:"Pre-book 48h",isOnDemand:true,status:"ok"}];
+  const validTrains = trains.filter(t => /^\d{2}:\d{2}$/.test(t));
+  const after = toMins(afterTime);
+  const upcoming = validTrains.filter(t => toMins(t) >= after);
+  const result = upcoming.slice(0, n).map((t, i) => {
+    const arrMins = toMins(t) + durMins;
+    const waitMins = toMins(t) - after;
+    const status = i===0 ? "recommended" : i===1 ? "next" : "later";
+    return { time:t, arrive:fromMins(arrMins), waitMins, status, isOnDemand:false };
+  });
+  return result;
+};
+// Latest train to catch for a departure: must arrive at airport by (flightDep - bufferMins)
+const getLatestSafeTrain = (trains, flightDepTime, durMins, bufferMins) => {
+  if(!trains||!trains.length) return null;
+  const validTrains = trains.filter(t => /^\d{2}:\d{2}$/.test(t));
+  const mustArriveBy = toMins(flightDepTime) - bufferMins;
+  const safe = validTrains.filter(t => toMins(t) + durMins <= mustArriveBy);
+  if(!safe.length) return null;
+  const latest = safe[safe.length-1];
+  const arrive = toMins(latest) + durMins;
+  const bufferLeft = mustArriveBy - arrive;
+  return { time:latest, arrive:fromMins(arrive), bufferLeft, isLast:safe.length===1 };
+};
+// Timing urgency label
+const timingLabel = waitMins => {
+  if(waitMins<=10) return {label:"Leaves soon",color:"#b91c1c",icon:"🔴"};
+  if(waitMins<=30) return {label:"Catch this one",color:"#92600a",icon:"🟡"};
+  return {label:"Comfortable",color:"#007a57",icon:"🟢"};
+};
+
+
+/* ─── CITY MAPS DATA ─────────────────────────────────────────────────────────*/
+const CITY_MAPS = {
+  Tokyo:{lat:35.682,lng:139.730,zoom:12,spots:[
+    {name:"Shinjuku",lat:35.6896,lng:139.7006,type:"hotel"},
+    {name:"Senso-ji Temple",lat:35.7148,lng:139.7967,type:"temple"},
+    {name:"Shibuya Crossing",lat:35.6595,lng:139.7006,type:"attraction"},
+    {name:"teamLab Planets",lat:35.6491,lng:139.7898,type:"attraction"},
+    {name:"Tsukiji Market",lat:35.6654,lng:139.7707,type:"attraction"},
+    {name:"Akihabara",lat:35.7022,lng:139.7741,type:"attraction"},
+  ]},
+  Hakone:{lat:35.220,lng:139.070,zoom:12,spots:[
+    {name:"Hakone-Yumoto Station",lat:35.2333,lng:139.1036,type:"train"},
+    {name:"Hakone Open Air Museum",lat:35.2516,lng:139.0515,type:"attraction"},
+    {name:"Lake Ashi",lat:35.1997,lng:139.0178,type:"nature"},
+    {name:"Mt. Fuji Viewpoint",lat:35.2271,lng:138.9817,type:"nature"},
+  ]},
+  Kyoto:{lat:35.010,lng:135.754,zoom:12,spots:[
+    {name:"Kyoto Station",lat:34.9858,lng:135.7588,type:"train"},
+    {name:"Arashiyama Bamboo",lat:35.0168,lng:135.6713,type:"nature"},
+    {name:"Fushimi Inari",lat:34.9677,lng:135.7792,type:"temple"},
+    {name:"Kinkaku-ji",lat:35.0394,lng:135.7292,type:"temple"},
+    {name:"Gion District",lat:35.0037,lng:135.7753,type:"attraction"},
+  ]},
+  Osaka:{lat:34.680,lng:135.502,zoom:13,spots:[
+    {name:"Osaka Castle",lat:34.6873,lng:135.5259,type:"temple"},
+    {name:"Dotonbori",lat:34.6686,lng:135.5031,type:"attraction"},
+    {name:"Namba Station",lat:34.6671,lng:135.5003,type:"train"},
+    {name:"Kuromon Market",lat:34.6685,lng:135.5090,type:"attraction"},
+    {name:"Shinsekai",lat:34.6522,lng:135.5063,type:"attraction"},
+  ]},
+};
+
+/* ─── DAY TEMPLATES ──────────────────────────────────────────────────────────*/
+const TMPLS = {
+  Tokyo:[
+    {emoji:"🗼",theme:"Arrival & Shinjuku",highlight:"World's most electric streets — free to wander",
+     accom:{budget:40,mid:120,premium:200,luxury:500},food:{budget:10,mid:28,premium:180,luxury:200},activities:{budget:0,mid:0,premium:60,luxury:200},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"PM",n:"Capsule hotel check-in, Shinjuku wander",c:0},{t:"Eve",n:"Golden Gai alley bar hop",c:0}],mid:[{t:"PM",n:"Hotel check-in, freshen up",c:0},{t:"Eve",n:"Ramen + Golden Gai",c:28}],premium:[{t:"PM",n:"4-star check-in",c:0},{t:"Eve",n:"Park Hyatt New York Bar",c:60}],luxury:[{t:"PM",n:"Aman Tokyo check-in + spa",c:0},{t:"Eve",n:"The Peak bar",c:200}]}},
+    {emoji:"⛩️",theme:"Asakusa & Old Tokyo",highlight:"Tokyo's oldest temple — completely free to enter",
+     accom:{budget:40,mid:120,premium:200,luxury:500},food:{budget:15,mid:35,premium:120,luxury:300},activities:{budget:0,mid:39,premium:120,luxury:230},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"AM",n:"Senso-ji Temple (free)",c:0},{t:"PM",n:"Ueno Park stroll",c:0}],mid:[{t:"AM",n:"Senso-ji + rickshaw",c:25},{t:"PM",n:"Tokyo National Museum",c:14}],premium:[{t:"AM",n:"Private Asakusa walk",c:80},{t:"PM",n:"Tokyo Skytree",c:40}],luxury:[{t:"AM",n:"Private dawn temple tour",c:150},{t:"PM",n:"Skytree private viewing",c:80}]}},
+    {emoji:"🌸",theme:"Shibuya & Harajuku",highlight:"360° sunset from Shibuya Sky rooftop",
+     accom:{budget:40,mid:120,premium:200,luxury:500},food:{budget:10,mid:35,premium:150,luxury:400},activities:{budget:10,mid:22,premium:135,luxury:320},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"AM",n:"Meiji Shrine (free)",c:0},{t:"PM",n:"Harajuku Takeshita",c:10}],mid:[{t:"AM",n:"Meiji Shrine",c:0},{t:"PM",n:"Shibuya Sky",c:22}],premium:[{t:"AM",n:"Private tea ceremony",c:90},{t:"PM",n:"Shibuya Sky + Nezu Museum",c:45}],luxury:[{t:"AM",n:"Private Harajuku tour",c:200},{t:"PM",n:"Nezu Museum private",c:120}]}},
+    {emoji:"🐟",theme:"Tsukiji & teamLab",highlight:"teamLab — art you literally walk through",
+     accom:{budget:40,mid:120,premium:200,luxury:500},food:{budget:28,mid:60,premium:260,luxury:800},activities:{budget:8,mid:50,premium:60,luxury:150},transport:{budget:8,mid:15,premium:20,luxury:25},
+     acts:{budget:[{t:"AM",n:"Tsukiji Market ($3 oysters)",c:12},{t:"PM",n:"teamLab Planets",c:8}],mid:[{t:"AM",n:"Tsukiji food tour",c:20},{t:"PM",n:"teamLab Planets",c:50}],premium:[{t:"AM",n:"Tsukiji + sushi counter",c:80},{t:"PM",n:"teamLab Planets",c:60}],luxury:[{t:"AM",n:"Toyosu private tuna auction",c:200},{t:"PM",n:"teamLab after-hours",c:150}]}},
+    {emoji:"🏙️",theme:"Tokyo Free Day",highlight:"Wander wherever curiosity leads",
+     accom:{budget:40,mid:120,premium:200,luxury:500},food:{budget:33,mid:35,premium:200,luxury:500},activities:{budget:15,mid:38,premium:110,luxury:700},transport:{budget:8,mid:15,premium:20,luxury:30},
+     acts:{budget:[{t:"AM",n:"Yanaka old-town walk (free)",c:0},{t:"PM",n:"Shimokitazawa vintage",c:15}],mid:[{t:"AM",n:"Shinjuku Gyoen",c:8},{t:"PM",n:"Odaiba waterfront",c:30}],premium:[{t:"AM",n:"Hamarikyu Gardens tour",c:60},{t:"PM",n:"Roppongi Art Triangle",c:50}],luxury:[{t:"AM",n:"Private helicopter tour",c:500},{t:"PM",n:"Isetan VIP shopping",c:200}]}},
+  ],
+  Hakone:[
+    {emoji:"🗻",theme:"Mt. Fuji Views & Onsen",highlight:"Ropeway over steaming volcanic valleys",
+     accom:{budget:50,mid:220,premium:420,luxury:900},food:{budget:20,mid:0,premium:0,luxury:0},activities:{budget:59,mid:47,premium:112,luxury:320},transport:{budget:5,mid:8,premium:10,luxury:15},
+     acts:{budget:[{t:"AM",n:"Hakone Free Pass: ropeway + pirate ship",c:55},{t:"Eve",n:"Public sento onsen",c:4}],mid:[{t:"AM",n:"Open Air Museum",c:32},{t:"Eve",n:"Ryokan onsen + kaiseki",c:0}],premium:[{t:"AM",n:"Private Fuji photography hike",c:80},{t:"Eve",n:"Private onsen villa",c:0}],luxury:[{t:"AM",n:"Private volcanic valley",c:120},{t:"Eve",n:"Gora Kadan spa",c:200}]}},
+    {emoji:"🌋",theme:"Volcanic Hakone",highlight:"Owakudani steam vents — utterly otherworldly",
+     accom:{budget:50,mid:220,premium:420,luxury:900},food:{budget:20,mid:40,premium:80,luxury:150},activities:{budget:14,mid:45,premium:140,luxury:750},transport:{budget:8,mid:15,premium:20,luxury:30},
+     acts:{budget:[{t:"AM",n:"Owakudani + black eggs",c:10},{t:"Eve",n:"Public onsen",c:4}],mid:[{t:"AM",n:"Owakudani ropeway",c:20},{t:"Eve",n:"Ryokan private onsen",c:25}],premium:[{t:"AM",n:"Private Owakudani tour",c:80},{t:"Eve",n:"Private ryokan villa",c:0}],luxury:[{t:"AM",n:"Private volcanic photography",c:200},{t:"Eve",n:"Helicopter sunset tour",c:400}]}},
+  ],
+  Kyoto:[
+    {emoji:"🎋",theme:"Arashiyama & Gion",highlight:"Bamboo grove at golden hour + lantern-lit Gion",
+     accom:{budget:40,mid:120,premium:200,luxury:480},food:{budget:20,mid:40,premium:80,luxury:150},activities:{budget:12,mid:35,premium:300,luxury:680},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"AM",n:"Arashiyama Bamboo Grove (free)",c:0},{t:"PM",n:"Tenryu-ji Garden",c:12}],mid:[{t:"AM",n:"Arashiyama + monkey park",c:35},{t:"Eve",n:"Gion izakaya",c:40}],premium:[{t:"AM",n:"Arashiyama private guide",c:100},{t:"Eve",n:"Maiko dinner — private ochaya",c:200}],luxury:[{t:"AM",n:"Private temple curator",c:180},{t:"Eve",n:"Exclusive geisha banquet",c:500}]}},
+    {emoji:"🦊",theme:"Fushimi Inari & Kinkaku-ji",highlight:"Sunrise alone at Fushimi Inari",
+     accom:{budget:40,mid:120,premium:200,luxury:480},food:{budget:28,mid:80,premium:320,luxury:900},activities:{budget:10,mid:43,premium:180,luxury:700},transport:{budget:5,mid:8,premium:12,luxury:20},
+     acts:{budget:[{t:"Dawn",n:"Fushimi Inari sunrise (free)",c:0},{t:"PM",n:"Kinkaku-ji",c:10}],mid:[{t:"Dawn",n:"Fushimi Inari sunrise",c:0},{t:"PM",n:"Kinkaku-ji + Ryoan-ji",c:18}],premium:[{t:"Dawn",n:"Private Fushimi hike",c:80},{t:"Dinner",n:"Kaiseki at Hyotei",c:220}],luxury:[{t:"Dawn",n:"Private Shinto ceremony",c:300},{t:"Dinner",n:"Kikunoi 3-star Michelin",c:500}]}},
+    {emoji:"🏛️",theme:"Nara Day Trip",highlight:"Bowing deer who bow back — free and surreal",
+     accom:{budget:40,mid:120,premium:200,luxury:480},food:{budget:15,mid:20,premium:160,luxury:400},activities:{budget:25,mid:41,premium:170,luxury:350},transport:{budget:20,mid:20,premium:25,luxury:40},
+     acts:{budget:[{t:"AM",n:"Nara train day trip",c:18},{t:"PM",n:"Todai-ji + deer park",c:7}],mid:[{t:"AM",n:"Nara + Todai-ji",c:25},{t:"PM",n:"Philosopher's Path",c:8}],premium:[{t:"AM",n:"Private Nara — Kasuga Taisha",c:120},{t:"PM",n:"Private tea house",c:40}],luxury:[{t:"AM",n:"Private Isuien Garden",c:200},{t:"Eve",n:"Kiyomizudera illumination",c:150}]}},
+    {emoji:"🍵",theme:"Kyoto Culture Day",highlight:"Philosopher's Path in autumn gold",
+     accom:{budget:40,mid:120,premium:200,luxury:480},food:{budget:12,mid:45,premium:200,luxury:400},activities:{budget:0,mid:33,premium:180,luxury:350},transport:{budget:5,mid:8,premium:12,luxury:20},
+     acts:{budget:[{t:"AM",n:"Philosopher's Path (free)",c:0},{t:"PM",n:"Nanzen-ji (free)",c:0}],mid:[{t:"AM",n:"Philosopher's Path + Nanzen-ji",c:8},{t:"PM",n:"Craft sake tasting",c:25}],premium:[{t:"AM",n:"Private Zen meditation",c:100},{t:"PM",n:"Artisan sake brewery tour",c:80}],luxury:[{t:"AM",n:"Private calligraphy lesson",c:200},{t:"PM",n:"Private sake sommelier",c:150}]}},
+  ],
+  Osaka:[
+    {emoji:"🏯",theme:"Osaka Castle & Dotonbori",highlight:"Dotonbori street food — best $5 meal on Earth",
+     accom:{budget:38,mid:110,premium:190,luxury:450},food:{budget:20,mid:100,premium:320,luxury:1150},activities:{budget:0,mid:51,premium:230,luxury:650},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"PM",n:"Osaka Castle grounds (free exterior)",c:0},{t:"Eve",n:"Dotonbori takoyaki crawl",c:20}],mid:[{t:"PM",n:"Osaka Castle museum",c:16},{t:"Eve",n:"Dotonbori + Kuromon Market",c:35}],premium:[{t:"AM",n:"Osaka Castle private tour",c:90},{t:"Eve",n:"Canal boat night cruise",c:40}],luxury:[{t:"AM",n:"Osaka Castle private dawn",c:200},{t:"Eve",n:"Private canal + champagne",c:150}]}},
+    {emoji:"🍣",theme:"Osaka Food & Culture",highlight:"Osaka is Japan's kitchen — eat everything",
+     accom:{budget:38,mid:110,premium:190,luxury:450},food:{budget:33,mid:90,premium:260,luxury:800},activities:{budget:18,mid:40,premium:180,luxury:400},transport:{budget:5,mid:10,premium:15,luxury:20},
+     acts:{budget:[{t:"AM",n:"Shinsekai retro neighbourhood",c:0},{t:"PM",n:"Osaka Aquarium",c:18}],mid:[{t:"AM",n:"Shinsekai + Tsutenkaku Tower",c:10},{t:"PM",n:"Street food trail",c:30}],premium:[{t:"AM",n:"Shinsaibashi premium shopping",c:80},{t:"PM",n:"Private food culture tour",c:100}],luxury:[{t:"AM",n:"Isetan VIP shopping",c:200},{t:"Dinner",n:"RyuGin Osaka 2-star",c:400}]}},
+    {emoji:"✈️",theme:"Last Day in Osaka",highlight:"One last takoyaki — you will miss it forever",
+     accom:{budget:0,mid:0,premium:0,luxury:0},food:{budget:20,mid:50,premium:80,luxury:200},activities:{budget:15,mid:30,premium:80,luxury:150},transport:{budget:10,mid:20,premium:60,luxury:100},
+     acts:{budget:[{t:"AM",n:"Last conbini breakfast",c:5},{t:"PM",n:"Shinsaibashi gifts",c:15}],mid:[{t:"AM",n:"Shinsekai walk + taiyaki",c:10},{t:"PM",n:"Shinsaibashi shopping",c:40}],premium:[{t:"AM",n:"Final omakase breakfast",c:80},{t:"PM",n:"Takashimaya souvenir",c:100}],luxury:[{t:"AM",n:"Hotel breakfast + spa",c:0},{t:"PM",n:"Personal shopper",c:200}]}},
+  ],
+};
+
+
+/* ─── CURATED RECS DATA ──────────────────────────────────────────────────────*/
+const CURATED = {
+  Tokyo:{
+    hotels:{
+      budget:[
+        {name:"Khaosan Tokyo Ninja",area:"Asakusa",price_per_night:"$35–55",stars:"2",highlights:"Themed capsules, rooftop",why:"Best capsule experience in Tokyo — Asakusa location perfect for temple walks",booking_url:"https://www.booking.com/hotel/jp/khaosan-tokyo-ninja.html"},
+        {name:"Nui. Hostel & Bar Lounge",area:"Asakusa",price_per_night:"$40–65",stars:"2",highlights:"Social bar, free WiFi",why:"Best hostel social scene in Tokyo — great for solo travelers and couples",booking_url:"https://www.booking.com/hotel/jp/nui-hostel-bar-lounge.html"},
+        {name:"Grids Tokyo Ueno",area:"Ueno",price_per_night:"$45–70",stars:"2",highlights:"Modern pods, great location",why:"Minutes from Ueno Park and museums — the most design-forward budget stay",booking_url:"https://www.booking.com/hotel/jp/grids-tokyo-ueno.html"},
+        {name:"Book and Bed Tokyo Shinjuku",area:"Shinjuku",price_per_night:"$50–80",stars:"2",highlights:"Sleep in a bookshelf, library theme",why:"Novelty capsule hotel inside a library — unforgettable experience",booking_url:"https://www.booking.com/hotel/jp/book-and-bed-tokyo.html"},
+      ],
+      mid:[
+        {name:"Shinjuku Granbell Hotel",area:"Shinjuku",price_per_night:"$120–180",stars:"3",highlights:"Design hotel, rooftop bar",why:"Best design hotel for the price — rooftop bar with city views is stunning",booking_url:"https://www.booking.com/hotel/jp/shinjuku-granbell.html"},
+        {name:"Hotel Gracery Shinjuku",area:"Kabukicho",price_per_night:"$130–200",stars:"3",highlights:"Godzilla head on roof, great location",why:"Iconic Godzilla hotel — central location steps from Shinjuku nightlife",booking_url:"https://www.booking.com/hotel/jp/hotel-gracery-shinjuku.html"},
+        {name:"Remm Akihabara",area:"Akihabara",price_per_night:"$110–160",stars:"3",highlights:"Sleep lab beds, quiet despite location",why:"World-class beds in the heart of nerd central — surprisingly great value",booking_url:"https://www.booking.com/hotel/jp/remm-akihabara.html"},
+        {name:"Citadines Shinjuku Tokyo",area:"Shinjuku",price_per_night:"$115–170",stars:"3",highlights:"Apartment-style, kitchen",why:"Apartment-style rooms perfect for 2 — cook breakfast and save on food",booking_url:"https://www.booking.com/hotel/jp/citadines-shinjuku-tokyo.html"},
+      ],
+      premium:[
+        {name:"Prince Gallery Tokyo Kioicho",area:"Akasaka",price_per_night:"$280–450",stars:"5",highlights:"Sky lobby, Michelin restaurants",why:"Stunning 36th-floor views, steps from Imperial Palace — genuinely exceptional",booking_url:"https://www.booking.com/hotel/jp/prince-gallery-tokyo-kioicho.html"},
+        {name:"The Okura Tokyo",area:"Akasaka",price_per_night:"$350–550",stars:"5",highlights:"Historic Japanese elegance, spa",why:"A Tokyo institution since 1962 — combines traditional Japanese art with luxury",booking_url:"https://www.booking.com/hotel/jp/the-okura-tokyo.html"},
+        {name:"Andaz Tokyo Toranomon Hills",area:"Toranomon",price_per_night:"$320–500",stars:"5",highlights:"Rooftop pool, modern Japanese",why:"Top-floor pool with Fuji views on clear days — best rooftop in the city",booking_url:"https://www.booking.com/hotel/jp/andaz-tokyo-toranomon-hills.html"},
+        {name:"Cerulean Tower Tokyu Hotel",area:"Shibuya",price_per_night:"$250–380",stars:"5",highlights:"Noh theatre, sky lounge",why:"Japanese aesthetic meets modern luxury — the Sky Lounge bar is unmissable",booking_url:"https://www.booking.com/hotel/jp/cerulean-tower-tokyu.html"},
+      ],
+      luxury:[
+        {name:"Aman Tokyo",area:"Otemachi",price_per_night:"$1,200–2,500",stars:"5",highlights:"33rd-floor spa, private onsen",why:"Simply the finest hotel in Tokyo — minimalist Japanese perfection at altitude",booking_url:"https://www.aman.com/hotels/aman-tokyo"},
+        {name:"The Peninsula Tokyo",area:"Hibiya",price_per_night:"$800–1,600",stars:"5",highlights:"Imperial Palace views, Rolls Royce fleet",why:"Impeccable service, rooms facing the Palace — the gold standard for luxury",booking_url:"https://www.booking.com/hotel/jp/the-peninsula-tokyo.html"},
+        {name:"Park Hyatt Tokyo",area:"Shinjuku",price_per_night:"$700–1,400",stars:"5",highlights:"Lost in Translation hotel, sky pool",why:"The iconic Lost in Translation hotel — New York Bar views are unforgettable",booking_url:"https://www.booking.com/hotel/jp/park-hyatt-tokyo.html"},
+        {name:"Hoshinoya Tokyo",area:"Otemachi",price_per_night:"$900–1,800",stars:"5",highlights:"Ryokan in a skyscraper, onsen",why:"Urban ryokan experience in a tower — tatami rooms + rooftop onsen = magic",booking_url:"https://hoshinoresorts.com/en/hotels/hoshinoyatokyo/"},
+      ],
+    },
+    restaurants:{
+      budget:[
+        {name:"Ichiran Ramen",area:"Shinjuku",cuisine:"Ramen",price_per_person:"$12–16",meal:"dinner",must_order:"Original tonkotsu ramen",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Ichiran+Ramen+Shinjuku+Tokyo"},
+        {name:"Tsukiji Outer Market Stalls",area:"Tsukiji",cuisine:"Seafood",price_per_person:"$8–20",meal:"breakfast",must_order:"Tamagoyaki, oysters, uni donburi",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Tsukiji+Outer+Market+Tokyo"},
+        {name:"Yoshinoya",area:"Citywide",cuisine:"Japanese fast food",price_per_person:"$5–9",meal:"lunch",must_order:"Gyudon (beef bowl)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Yoshinoya+Tokyo"},
+        {name:"Koenji Omoide Yokocho",area:"Shinjuku",cuisine:"Yakitori",price_per_person:"$15–25",meal:"late-night",must_order:"Grilled chicken skewers + Sapporo draft",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Omoide+Yokocho+Shinjuku+Tokyo"},
+        {name:"7-Eleven / Lawson",area:"Everywhere",cuisine:"Japanese convenience",price_per_person:"$3–8",meal:"breakfast",must_order:"Egg salad sandwich, onigiri, hot oden",reservation:"walk-in",booking_url:"https://www.google.com/search?q=best+conbini+food+Tokyo"},
+      ],
+      mid:[
+        {name:"Fuunji",area:"Shinjuku",cuisine:"Tsukemen",price_per_person:"$14–18",meal:"lunch",must_order:"Tokussei tsukemen (dipping ramen)",reservation:"walk-in (queue early)",booking_url:"https://www.google.com/search?q=Fuunji+ramen+Shinjuku+Tokyo"},
+        {name:"Gonpachi Nishi-Azabu",area:"Nishi-Azabu",cuisine:"Izakaya",price_per_person:"$35–55",meal:"dinner",must_order:"Soba + grilled skewers + sake",reservation:"recommended",booking_url:"https://www.google.com/search?q=Gonpachi+Nishi-Azabu+Tokyo"},
+        {name:"Afuri",area:"Ebisu",cuisine:"Yuzu ramen",price_per_person:"$16–22",meal:"lunch",must_order:"Yuzu shio ramen",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Afuri+ramen+Ebisu+Tokyo"},
+        {name:"Sushi Zanmai Tsukiji",area:"Tsukiji",cuisine:"Sushi",price_per_person:"$40–70",meal:"dinner",must_order:"Omakase set",reservation:"recommended",booking_url:"https://www.google.com/search?q=Sushi+Zanmai+Tsukiji+Tokyo"},
+        {name:"New York Bar — Park Hyatt",area:"Shinjuku",cuisine:"Bar / Western",price_per_person:"$30–50",meal:"late-night",must_order:"Whisky highball + jazz (cover charge applies)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=New+York+Bar+Park+Hyatt+Tokyo"},
+      ],
+      premium:[
+        {name:"Sushi Saito",area:"Akasaka",cuisine:"Omakase sushi",price_per_person:"$200–350",meal:"dinner",must_order:"Full omakase — let chef decide",reservation:"required (weeks ahead)",booking_url:"https://www.google.com/search?q=Sushi+Saito+Tokyo+reservation"},
+        {name:"Narisawa",area:"Minami-Aoyama",cuisine:"Innovative Japanese",price_per_person:"$250–400",meal:"dinner",must_order:"Satoyama cuisine tasting menu",reservation:"required",booking_url:"https://www.narisawa-yoshihiro.com/en/"},
+        {name:"Kagurazaka Ishikawa",area:"Kagurazaka",cuisine:"Kaiseki",price_per_person:"$200–300",meal:"dinner",must_order:"Seasonal kaiseki tasting menu",reservation:"required",booking_url:"https://www.google.com/search?q=Kagurazaka+Ishikawa+Tokyo+reservation"},
+        {name:"Tempura Kondo",area:"Ginza",cuisine:"Tempura",price_per_person:"$120–200",meal:"lunch",must_order:"Seasonal vegetable + seafood tempura course",reservation:"required",booking_url:"https://www.google.com/search?q=Tempura+Kondo+Ginza+Tokyo"},
+        {name:"The Peak Lounge — Hyatt",area:"Shinjuku",cuisine:"Bar / cocktails",price_per_person:"$40–80",meal:"late-night",must_order:"Mount Fuji cocktail + city panorama",reservation:"walk-in",booking_url:"https://www.google.com/search?q=The+Peak+Lounge+Park+Hyatt+Tokyo"},
+      ],
+      luxury:[
+        {name:"Sukiyabashi Jiro Honten",area:"Ginza",cuisine:"Omakase sushi",price_per_person:"$400–600",meal:"dinner",must_order:"Full omakase — no menu, trust the chef",reservation:"required (months ahead via concierge)",booking_url:"https://www.google.com/search?q=Sukiyabashi+Jiro+Ginza+reservation"},
+        {name:"L'Effervescence",area:"Nishi-Azabu",cuisine:"French-Japanese",price_per_person:"$300–500",meal:"dinner",must_order:"Seasonal 9-course tasting menu",reservation:"required",booking_url:"https://www.leffervescence.jp/en/"},
+        {name:"Den",area:"Jimbocho",cuisine:"Creative Japanese",price_per_person:"$250–400",meal:"dinner",must_order:"Dentucky Fried Chicken (signature starter)",reservation:"required",booking_url:"https://www.google.com/search?q=restaurant+Den+Tokyo+reservation"},
+        {name:"Aman Tokyo The Lounge",area:"Otemachi",cuisine:"Japanese fine dining",price_per_person:"$100–200",meal:"breakfast",must_order:"Japanese breakfast set with miso and grilled fish",reservation:"hotel guests priority",booking_url:"https://www.aman.com/hotels/aman-tokyo/dining"},
+        {name:"Bar High Five",area:"Ginza",cuisine:"Cocktail bar",price_per_person:"$50–100",meal:"late-night",must_order:"Custom cocktail — just describe your mood",reservation:"walk-in (arrive early)",booking_url:"https://www.google.com/search?q=Bar+High+Five+Ginza+Tokyo"},
+      ],
+    },
+  },
+  Hakone:{
+    hotels:{
+      budget:[
+        {name:"Guesthouse Hakone Tent",area:"Gora",price_per_night:"$40–65",stars:"2",highlights:"Mountain views, social kitchen",why:"Friendly English-speaking staff, perfect for solo travelers and couples on budget",booking_url:"https://www.booking.com/hotel/jp/guesthouse-hakone-tent.html"},
+        {name:"K's House Hakone",area:"Hakone-Yumoto",price_per_night:"$35–55",stars:"2",highlights:"Free onsen access, social vibe",why:"Best backpacker base for Hakone — free onsen access makes it exceptional value",booking_url:"https://www.booking.com/hotel/jp/ks-house-hakone.html"},
+        {name:"Fuji Hakone Guest House",area:"Moto-Hakone",price_per_night:"$45–70",stars:"2",highlights:"Lake Ashi views, traditional Japanese",why:"Japanese family-run guesthouse — authentic cultural experience on a budget",booking_url:"https://www.booking.com/hotel/jp/fuji-hakone-guest-house.html"},
+        {name:"Backpackers Hostel K's Hakone",area:"Hakone-Yumoto",price_per_night:"$30–50",stars:"1",highlights:"Onsen, mountain town location",why:"Cheapest way to experience Hakone — shared onsen included in price",booking_url:"https://www.booking.com/hotel/jp/ks-house-hakone.html"},
+      ],
+      mid:[
+        {name:"Hakone Hotel Kowakien",area:"Kowakidani",price_per_night:"$180–280",stars:"4",highlights:"Large onsen complex, nature views",why:"Massive traditional hotel with spectacular mountain onsen — great all-rounder",booking_url:"https://www.booking.com/hotel/jp/hakone-hotel-kowakien.html"},
+        {name:"Yama no Chaya",area:"Gora",price_per_night:"$200–320",stars:"4",highlights:"Private onsen, mountain breakfast",why:"Intimate ryokan with in-room private onsen — romantic and excellent value for ryokan",booking_url:"https://www.booking.com/hotel/jp/yama-no-chaya-hakone.html"},
+        {name:"Hakone Yuryo",area:"Hakone-Yumoto",price_per_night:"$160–240",stars:"3",highlights:"Day onsen + overnight, river views",why:"Best for first-time ryokan experience — affordable and beautifully designed",booking_url:"https://www.hakoneyuryo.jp/en/"},
+        {name:"Hakone Pax Yoshino",area:"Gora",price_per_night:"$170–260",stars:"3",highlights:"Outdoor hot spring, kaiseki dinner",why:"Outstanding kaiseki multi-course dinner included — the food alone justifies the price",booking_url:"https://www.booking.com/hotel/jp/hakone-pax-yoshino.html"},
+      ],
+      premium:[
+        {name:"Gora Kadan",area:"Gora",price_per_night:"$500–900",stars:"5",highlights:"Former Imperial summer house, private villa onsen",why:"Once the Imperial family's retreat — exclusive private spring baths and flawless service",booking_url:"https://www.gorakadan.com/en/"},
+        {name:"Hakone Ginyu",area:"Myojindai",price_per_night:"$450–800",stars:"5",highlights:"Cliffside onsen, forest views",why:"Each room has a private rotenburo (outdoor bath) with forest canopy views",booking_url:"https://www.hakone-ginyu.co.jp/en/"},
+        {name:"Fujiya Hotel",area:"Miyanoshita",price_per_night:"$280–480",stars:"4",highlights:"Historic 1878 hotel, Japanese-Western fusion",why:"Japan's oldest resort hotel, full of history and colonial-era charm",booking_url:"https://www.booking.com/hotel/jp/fujiya-hotel-miyanoshita.html"},
+        {name:"Arcana Izu Kogen",area:"Near Hakone",price_per_night:"$400–700",stars:"5",highlights:"Private villa, forest onsen",why:"Villa-style rooms completely surrounded by forest — total privacy and silence",booking_url:"https://www.booking.com/hotel/jp/arcana-izu.html"},
+      ],
+      luxury:[
+        {name:"Hyatt Regency Hakone",area:"Hakone",price_per_night:"$600–1,200",stars:"5",highlights:"Infinity onsen with Fuji view, Michelin dining",why:"Fuji-facing infinity thermal pool at sunset — a truly once-in-a-lifetime moment",booking_url:"https://www.booking.com/hotel/jp/hyatt-regency-hakone.html"},
+        {name:"Hakone Retreat fore",area:"Gora",price_per_night:"$700–1,400",stars:"5",highlights:"Ultra-minimalist, private villa onsen",why:"Award-winning architecture meets Japanese hot spring — the most design-forward luxury",booking_url:"https://www.booking.com/hotel/jp/hakone-retreat-fore.html"},
+        {name:"Gora Kadan",area:"Gora",price_per_night:"$900–2,000",stars:"5",highlights:"Imperial heritage, multi-spring complex",why:"The pinnacle of Hakone ryokan — flawless kaiseki, ancient thermal springs, Imperial history",booking_url:"https://www.gorakadan.com/en/"},
+        {name:"Hakone Ginyu Deluxe Villa",area:"Myojindai",price_per_night:"$1,000–2,000",stars:"5",highlights:"Standalone villa, butler service",why:"Standalone villas with dedicated butler and private forest onsen — pure escapism",booking_url:"https://www.hakone-ginyu.co.jp/en/"},
+      ],
+    },
+    restaurants:{
+      budget:[
+        {name:"Amazake Chaya",area:"Moto-Hakone",cuisine:"Japanese teahouse",price_per_person:"$5–12",meal:"breakfast",must_order:"Amazake (sweet rice drink) + mochi",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Amazake+Chaya+Hakone"},
+        {name:"Hakone Yumoto Street Stalls",area:"Hakone-Yumoto",cuisine:"Snacks",price_per_person:"$5–15",meal:"lunch",must_order:"Black egg (kuro tamago) + onsen manju",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Hakone+Yumoto+food+street"},
+        {name:"Ryokan kaiseki (included)",area:"Your ryokan",cuisine:"Kaiseki",price_per_person:"$0 (included)",meal:"dinner",must_order:"Full seasonal multi-course set — let the chef guide you",reservation:"included with stay",booking_url:"https://www.google.com/search?q=Hakone+ryokan+kaiseki+dinner"},
+        {name:"Soba Tachibana",area:"Hakone-Yumoto",cuisine:"Soba noodles",price_per_person:"$10–18",meal:"lunch",must_order:"Zaru soba (cold buckwheat noodles)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=soba+restaurant+Hakone"},
+        {name:"Owakudani Black Egg Stand",area:"Owakudani",cuisine:"Snacks",price_per_person:"$3–6",meal:"lunch",must_order:"Kuro tamago (sulfur-boiled black eggs)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Owakudani+black+eggs+Hakone"},
+      ],
+      mid:[
+        {name:"Fujiya Hotel Orchid Room",area:"Miyanoshita",cuisine:"French-Japanese",price_per_person:"$50–90",meal:"dinner",must_order:"Seasonal set menu with local mountain vegetables",reservation:"recommended",booking_url:"https://www.google.com/search?q=Fujiya+Hotel+Orchid+Room+Hakone"},
+        {name:"Hakone Yuryo Dining",area:"Hakone-Yumoto",cuisine:"Kaiseki",price_per_person:"$60–100",meal:"dinner",must_order:"Full kaiseki seasonal menu",reservation:"required",booking_url:"https://www.hakoneyuryo.jp/en/"},
+        {name:"Hyotan",area:"Hakone-Yumoto",cuisine:"Izakaya",price_per_person:"$25–45",meal:"dinner",must_order:"Local river fish + mountain vegetables",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Hyotan+izakaya+Hakone"},
+        {name:"Café de Gora",area:"Gora",price_per_night:"$15–25",meal:"breakfast",must_order:"Mountain herb omelette + local coffee",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Cafe+de+Gora+Hakone"},
+        {name:"Naraya Café",area:"Miyagino",cuisine:"Fusion café",price_per_person:"$12–22",meal:"lunch",must_order:"Foot onsen + matcha parfait",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Naraya+Cafe+Hakone"},
+      ],
+      premium:[
+        {name:"Gora Kadan Restaurant",area:"Gora",cuisine:"Kaiseki",price_per_person:"$150–250",meal:"dinner",must_order:"Full kaiseki — 12-course seasonal menu",reservation:"required",booking_url:"https://www.gorakadan.com/en/"},
+        {name:"Hyatt Regency Hakone — Dining",area:"Hakone",cuisine:"French-Japanese",price_per_person:"$80–150",meal:"dinner",must_order:"Wagyu + Mt. Fuji-spring water dishes",reservation:"required",booking_url:"https://www.booking.com/hotel/jp/hyatt-regency-hakone.html"},
+        {name:"Hakone Retreat fore Dining",area:"Gora",cuisine:"Contemporary Japanese",price_per_person:"$100–180",meal:"dinner",must_order:"Chef's seasonal tasting menu",reservation:"required",booking_url:"https://www.booking.com/hotel/jp/hakone-retreat-fore.html"},
+        {name:"Sousaku Ryori Kichisen",area:"Hakone",cuisine:"Creative kaiseki",price_per_person:"$80–120",meal:"lunch",must_order:"Bento-style seasonal lunch set",reservation:"recommended",booking_url:"https://www.google.com/search?q=Kichisen+restaurant+Hakone"},
+        {name:"Fujiya Hotel Kikka-so Bar",area:"Miyanoshita",cuisine:"Bar",price_per_person:"$20–40",meal:"late-night",must_order:"Local sake + Fuji mineral water cocktails",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Fujiya+Hotel+bar+Hakone"},
+      ],
+      luxury:[
+        {name:"Gora Kadan Full Kaiseki",area:"Gora",cuisine:"Imperial kaiseki",price_per_person:"$250–400",meal:"dinner",must_order:"Full 14-course imperial-style kaiseki",reservation:"required",booking_url:"https://www.gorakadan.com/en/"},
+        {name:"Hakone Ginyu Dining",area:"Myojindai",cuisine:"Private kaiseki",price_per_person:"$180–280",meal:"dinner",must_order:"In-room private dining with forest views",reservation:"required (in-villa)",booking_url:"https://www.hakone-ginyu.co.jp/en/"},
+        {name:"Fuji Views Champagne Breakfast",area:"Your luxury ryokan",cuisine:"Japanese luxury",price_per_person:"$60–100",meal:"breakfast",must_order:"Wagyu + seasonal local vegetables + champagne",reservation:"included with stay",booking_url:"https://www.google.com/search?q=luxury+ryokan+breakfast+Hakone"},
+        {name:"Sushi Ro Kaiseki",area:"Hakone-Yumoto",cuisine:"Premium sushi kaiseki",price_per_person:"$120–200",meal:"dinner",must_order:"Chef omakase sushi + local sake pairing",reservation:"required",booking_url:"https://www.google.com/search?q=premium+sushi+kaiseki+Hakone"},
+        {name:"Hyatt Regency Sky Bar",area:"Hakone",cuisine:"Cocktail bar",price_per_person:"$40–70",meal:"late-night",must_order:"Fuji-view cocktail at sunset",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Hyatt+Regency+Hakone+bar"},
+      ],
+    },
+  },
+  Kyoto:{
+    hotels:{
+      budget:[
+        {name:"Piece Hostel Kyoto",area:"Fushimi",price_per_night:"$25–45",stars:"1",highlights:"Near Inari, social vibe",why:"Best budget base for Fushimi Inari — 5-min walk from the shrine gates",booking_url:"https://www.booking.com/hotel/jp/piece-hostel-kyoto.html"},
+        {name:"Guesthouse Yadoru Kyoto",area:"Higashiyama",price_per_night:"$30–55",stars:"2",highlights:"Machiya (townhouse), Gion area",why:"Sleep in a 100-year-old Japanese townhouse — the most authentic budget option",booking_url:"https://www.booking.com/hotel/jp/yadoru-kyoto.html"},
+        {name:"K's House Kyoto",area:"Kyoto Station area",price_per_night:"$28–50",stars:"1",highlights:"Clean, social kitchen, central",why:"The classic backpacker base — extremely clean and well-run with great common areas",booking_url:"https://www.booking.com/hotel/jp/ks-house-kyoto.html"},
+        {name:"The Millennials Kyoto",area:"Kawaramachi",price_per_night:"$40–65",stars:"2",highlights:"Smart pods, smart recliner chairs",why:"Most tech-forward budget stay — each pod has a smart recliner that converts to a bed",booking_url:"https://www.booking.com/hotel/jp/the-millennials-kyoto.html"},
+      ],
+      mid:[
+        {name:"Mitsui Garden Hotel Kyoto Sanjo",area:"Sanjo",price_per_night:"$120–190",stars:"3",highlights:"Onsen, near Nishiki Market",why:"Best business hotel value — rooftop onsen and 2-min walk from Nishiki food market",booking_url:"https://www.booking.com/hotel/jp/mitsui-garden-hotel-kyoto-sanjo.html"},
+        {name:"Hotel Kanra Kyoto",area:"Toji area",price_per_night:"$180–280",stars:"4",highlights:"Machiya design, kimono rental",why:"Modern interpretation of a machiya townhouse — extremely atmospheric",booking_url:"https://www.booking.com/hotel/jp/hotel-kanra-kyoto.html"},
+        {name:"Karanokoto Townhouse",area:"Higashiyama",price_per_night:"$150–250",stars:"3",highlights:"Entire machiya, private garden",why:"Rent the whole townhouse — private garden and tea room, perfect for couples",booking_url:"https://www.booking.com/hotel/jp/karanokoto-kyoto.html"},
+        {name:"Dormy Inn Premium Kyoto",area:"Ekimae",price_per_night:"$110–160",stars:"3",highlights:"Natural hot spring, late-night ramen",why:"Outstanding value — free hot spring onsen and free late-night ramen. Yes, really.",booking_url:"https://www.booking.com/hotel/jp/dormy-inn-premium-kyoto.html"},
+      ],
+      premium:[
+        {name:"Hyatt Regency Kyoto",area:"Higashiyama",price_per_night:"$350–550",stars:"5",highlights:"Walking distance to Sanjusangendo",why:"Best location of any 5-star — walk to all main temples without touching a bus",booking_url:"https://www.booking.com/hotel/jp/hyatt-regency-kyoto.html"},
+        {name:"The Ritz-Carlton Kyoto",area:"Kamogawa River",price_per_night:"$500–900",stars:"5",highlights:"River views, traditional Japanese spa",why:"River-facing rooms with mountain backdrop — spectacular at dusk",booking_url:"https://www.booking.com/hotel/jp/the-ritz-carlton-kyoto.html"},
+        {name:"Tawaraya Ryokan",area:"Nakagyo",price_per_night:"$800–1,500",stars:"5",highlights:"300-year-old inn, private garden",why:"Kyoto's most storied ryokan — former guests include Steve Jobs and the Obamas",booking_url:"https://www.google.com/search?q=Tawaraya+Ryokan+Kyoto"},
+        {name:"Sowaka",area:"Gion",price_per_night:"$400–700",stars:"5",highlights:"Boutique Gion machiya, rooftop",why:"In the heart of Gion — wake up and walk to geisha sightings without a taxi",booking_url:"https://www.booking.com/hotel/jp/sowaka-kyoto.html"},
+      ],
+      luxury:[
+        {name:"Aman Kyoto",area:"Kitayama",price_per_night:"$1,500–3,500",stars:"5",highlights:"Secret garden onsen, moss forest",why:"Hidden in a private moss-garden forest — the most secluded luxury experience in Japan",booking_url:"https://www.aman.com/hotels/aman-kyoto"},
+        {name:"Tawaraya Ryokan",area:"Nakagyo",price_per_night:"$1,200–2,500",stars:"5",highlights:"300-year heritage, private tea ceremony",why:"The finest traditional inn in Japan — every detail a masterwork of hospitality",booking_url:"https://www.google.com/search?q=Tawaraya+Ryokan+Kyoto"},
+        {name:"The Ritz-Carlton Kyoto Suite",area:"Kamogawa",price_per_night:"$1,500–4,000",stars:"5",highlights:"River suite, private butler, kaiseki",why:"Kamogawa river suite at sunset with private butler service is breathtaking",booking_url:"https://www.booking.com/hotel/jp/the-ritz-carlton-kyoto.html"},
+        {name:"Nishimuraya Honkan",area:"Near Gion",price_per_night:"$900–2,000",stars:"5",highlights:"Ancient ryokan, private garden onsen",why:"150-year-old ryokan with a magnificent private moss garden — pure old Kyoto",booking_url:"https://www.booking.com/hotel/jp/nishimuraya-honkan.html"},
+      ],
+    },
+    restaurants:{
+      budget:[
+        {name:"Nishiki Market Stalls",area:"Nishiki",cuisine:"Kyoto street food",price_per_person:"$8–20",meal:"lunch",must_order:"Yuba (tofu skin), pickles, dashi tamago",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Nishiki+Market+Kyoto+food"},
+        {name:"Omen Noodles",area:"Higashiyama",cuisine:"Udon",price_per_person:"$12–18",meal:"lunch",must_order:"Cold udon set with seasonal vegetables",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Omen+noodles+Kyoto"},
+        {name:"Musashi Sushi",area:"Kawaramachi",cuisine:"Sushi",price_per_person:"$15–25",meal:"dinner",must_order:"Rotating belt sushi — pick whatever looks fresh",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Musashi+Sushi+Kyoto"},
+        {name:"Tofu restaurant Okutan",area:"Nanzen-ji",cuisine:"Yudofu (tofu hot pot)",price_per_person:"$18–28",meal:"lunch",must_order:"Traditional yudofu kaiseki set",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Okutan+tofu+Kyoto+Nanzenji"},
+        {name:"Pontocho Alley",area:"Pontocho",cuisine:"Varied",price_per_person:"$10–30",meal:"late-night",must_order:"Explore — pick a small izakaya with a river view",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Pontocho+Alley+Kyoto+dining"},
+      ],
+      mid:[
+        {name:"Kikucho",area:"Gion",cuisine:"Kaiseki",price_per_person:"$60–100",meal:"dinner",must_order:"Seasonal kaiseki lunch set (best value)",reservation:"recommended",booking_url:"https://www.google.com/search?q=Kikucho+Gion+Kyoto+restaurant"},
+        {name:"Mishima-tei",area:"Sanjo",cuisine:"Sukiyaki",price_per_person:"$60–100",meal:"dinner",must_order:"Wagyu sukiyaki set",reservation:"recommended",booking_url:"https://www.google.com/search?q=Mishima-tei+sukiyaki+Kyoto"},
+        {name:"Roan Kikunoi",area:"Higashiyama",cuisine:"Kaiseki",price_per_person:"$80–120",meal:"lunch",must_order:"Lunch kaiseki — best value fine dining in Kyoto",reservation:"recommended",booking_url:"https://www.google.com/search?q=Roan+Kikunoi+Kyoto"},
+        {name:"Nakamura-ro",area:"Yasaka Shrine",cuisine:"Kyoto cuisine",price_per_person:"$50–80",meal:"lunch",must_order:"Kyoto obanzai seasonal set",reservation:"recommended",booking_url:"https://www.google.com/search?q=Nakamura-ro+Kyoto"},
+        {name:"Bar K6",area:"Kawaramachi",cuisine:"Craft whisky bar",price_per_person:"$25–50",meal:"late-night",must_order:"Japanese single malt + local craft beer",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Bar+K6+Kyoto"},
+      ],
+      premium:[
+        {name:"Kikunoi Honten",area:"Higashiyama",cuisine:"3-star kaiseki",price_per_person:"$200–350",meal:"dinner",must_order:"Full 12-course seasonal kaiseki",reservation:"required",booking_url:"https://kikunoi.jp/en/"},
+        {name:"Hyotei",area:"Nanzen-ji",cuisine:"Kaiseki",price_per_person:"$250–400",meal:"dinner",must_order:"450-year-old recipe: Asa-gayu kaiseki",reservation:"required (far ahead)",booking_url:"https://www.google.com/search?q=Hyotei+Kyoto+reservation"},
+        {name:"Mizai",area:"Fuyacho",cuisine:"Innovative kaiseki",price_per_person:"$200–350",meal:"dinner",must_order:"Seasonal tasting menu with dashi focus",reservation:"required",booking_url:"https://www.google.com/search?q=Mizai+Kyoto+reservation"},
+        {name:"Tsurusei",area:"Pontocho",cuisine:"Kyoto-style seafood",price_per_person:"$80–140",meal:"dinner",must_order:"Yudofu and fresh seafood from Sea of Japan",reservation:"recommended",booking_url:"https://www.google.com/search?q=Tsurusei+Kyoto+Pontocho"},
+        {name:"Sake Bar Yoramu",area:"Nakagyo",cuisine:"Sake bar",price_per_person:"$40–70",meal:"late-night",must_order:"Sake sommelier flight — 5 varieties with expert guidance",reservation:"recommended",booking_url:"https://www.google.com/search?q=Sake+Bar+Yoramu+Kyoto"},
+      ],
+      luxury:[
+        {name:"Kikunoi Honten",area:"Higashiyama",cuisine:"3★ Michelin kaiseki",price_per_person:"$400–700",meal:"dinner",must_order:"Grand kaiseki with rare seasonal ingredients",reservation:"required months ahead",booking_url:"https://kikunoi.jp/en/"},
+        {name:"Hyotei",area:"Nanzen-ji",cuisine:"3★ Michelin kaiseki",price_per_person:"$400–600",meal:"dinner",must_order:"Chef's 15-course heirloom recipe kaiseki",reservation:"required months ahead",booking_url:"https://www.google.com/search?q=Hyotei+Kyoto+reservation"},
+        {name:"Aman Kyoto Dining",area:"Kitayama",cuisine:"Private kaiseki",price_per_person:"$200–400",meal:"dinner",must_order:"In-garden private kaiseki under lanterns",reservation:"hotel guests",booking_url:"https://www.aman.com/hotels/aman-kyoto/dining"},
+        {name:"Private Ochaya (Tea House)",area:"Gion",cuisine:"Maiko dinner",price_per_person:"$500–1,200",meal:"dinner",must_order:"Private maiko entertainment + full kaiseki — arranged through luxury hotel concierge",reservation:"via concierge only",booking_url:"https://www.google.com/search?q=private+ochaya+Kyoto+Gion+maiko+dinner"},
+        {name:"Ippodo Tea Salon",area:"Nakagyo",cuisine:"Tea ceremony",price_per_person:"$30–60",meal:"breakfast",must_order:"Seasonal matcha + wagashi sweets — the finest matcha in Japan",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Ippodo+Tea+Salon+Kyoto"},
+      ],
+    },
+  },
+  Osaka:{
+    hotels:{
+      budget:[
+        {name:"Osaka Guesthouse Nest",area:"Namba",price_per_night:"$25–45",stars:"1",highlights:"Central Namba, social kitchen",why:"5-min walk from Dotonbori — best budget location in the entire city",booking_url:"https://www.booking.com/hotel/jp/osaka-guesthouse-nest.html"},
+        {name:"Dormy Inn Shinsaibashi",area:"Shinsaibashi",price_per_night:"$40–65",stars:"2",highlights:"Natural hot spring, great breakfast",why:"Incredible value: natural hot spring + full Japanese breakfast + central location",booking_url:"https://www.booking.com/hotel/jp/dormy-inn-shinsaibashi.html"},
+        {name:"J-Hoppers Osaka Guesthouse",area:"Nipponbashi",price_per_night:"$22–40",stars:"1",highlights:"Social vibe, Den-Den Town",why:"Best social hostel in Osaka — legendary pre-departure party atmosphere",booking_url:"https://www.booking.com/hotel/jp/j-hoppers-osaka.html"},
+        {name:"APA Hotel Namba-Eki",area:"Namba",price_per_night:"$50–80",stars:"2",highlights:"Clean, compact, great location",why:"Reliable business hotel bargain — quiet despite being steps from Dotonbori",booking_url:"https://www.booking.com/hotel/jp/apa-hotel-namba-eki.html"},
+      ],
+      mid:[
+        {name:"Cross Hotel Osaka",area:"Shinsaibashi",price_per_night:"$110–170",stars:"3",highlights:"Design hotel, rooftop bar",why:"Best designed mid-range hotel — rooftop Jacuzzi overlooking Shinsaibashi shopping",booking_url:"https://www.booking.com/hotel/jp/cross-hotel-osaka.html"},
+        {name:"THE BOLY OSAKA",area:"Osaka Castle",price_per_night:"$150–230",stars:"4",highlights:"Boutique, craft design, modern Japanese",why:"Boutique hotel near the castle — small, personal and beautifully designed",booking_url:"https://www.booking.com/hotel/jp/the-boly-osaka.html"},
+        {name:"Quintessa Hotel Osaka Shinsaibashi",area:"Shinsaibashi",price_per_night:"$120–190",stars:"4",highlights:"Stylish rooms, great location",why:"Smart design hotel without the premium markup — excellent central location",booking_url:"https://www.booking.com/hotel/jp/quintessa-hotel-osaka-shinsaibashi.html"},
+        {name:"Hotel Monterey Grasmere Osaka",area:"Namba",price_per_night:"$100–160",stars:"3",highlights:"Gothic European theme, central",why:"Quirky European-themed hotel in Japan — oddly charming and excellent value",booking_url:"https://www.booking.com/hotel/jp/hotel-monterey-grasmere-osaka.html"},
+      ],
+      premium:[
+        {name:"Conrad Osaka",area:"Nakanoshima",price_per_night:"$350–600",stars:"5",highlights:"40th floor, infinity pool, river views",why:"Most spectacular views in Osaka — 40-floor infinity pool overlooking two rivers",booking_url:"https://www.booking.com/hotel/jp/conrad-osaka.html"},
+        {name:"InterContinental Osaka",area:"Grand Front",price_per_night:"$300–500",stars:"5",highlights:"Sky bar, shopping complex access",why:"Direct access to Grand Front shopping + best Sky Bar cocktails in the city",booking_url:"https://www.booking.com/hotel/jp/intercontinental-osaka.html"},
+        {name:"W Osaka",area:"Shinsaibashi",price_per_night:"$380–650",stars:"5",highlights:"Tadao Ando design, WET deck pool",why:"Tadao Ando architecture + rooftop WET deck pool — the most instagrammable hotel",booking_url:"https://www.booking.com/hotel/jp/w-osaka.html"},
+        {name:"Namba Oriental Hotel",area:"Namba",price_per_night:"$250–420",stars:"5",highlights:"Central, spacious rooms, Japanese service",why:"Best location of any 5-star — step out into the Dotonbori action",booking_url:"https://www.booking.com/hotel/jp/namba-oriental-hotel.html"},
+      ],
+      luxury:[
+        {name:"Four Seasons Osaka",area:"Nakanoshima",price_per_night:"$800–2,000",stars:"5",highlights:"Castle tower views, Japanese garden rooftop",why:"The finest hotel in Osaka — views of the castle from the rooftop garden are unmatched",booking_url:"https://www.fourseasons.com/osaka/"},
+        {name:"Conrad Osaka Skyline Suite",area:"Nakanoshima",price_per_night:"$1,000–2,500",stars:"5",highlights:"360° city views, butler, infinity pool",why:"40th-floor suite with private butler and 360° views across Osaka Bay to Kii Peninsula",booking_url:"https://www.booking.com/hotel/jp/conrad-osaka.html"},
+        {name:"W Osaka Wow Suite",area:"Shinsaibashi",price_per_night:"$1,200–3,000",stars:"5",highlights:"Tadao Ando design, WET deck",why:"Ando's concrete aesthetic meets W's vibrant style — a genuine design destination",booking_url:"https://www.booking.com/hotel/jp/w-osaka.html"},
+        {name:"Hyatt Regency Osaka",area:"Osaka Bay",price_per_night:"$400–800",stars:"5",highlights:"Bay views, multiple pools",why:"Serene bay retreat away from city crowds — multiple pools and Japanese garden",booking_url:"https://www.booking.com/hotel/jp/hyatt-regency-osaka.html"},
+      ],
+    },
+    restaurants:{
+      budget:[
+        {name:"Ichifuji Yakiniku",area:"Shinsekai",cuisine:"Yakiniku (BBQ)",price_per_person:"$15–25",meal:"dinner",must_order:"Horumon (offal BBQ) — the Osaka specialty",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Shinsekai+yakiniku+Osaka"},
+        {name:"Dotonbori Street Food",area:"Dotonbori",cuisine:"Street food",price_per_person:"$8–20",meal:"lunch",must_order:"Takoyaki (octopus balls) + kushikatsu",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Dotonbori+street+food+Osaka"},
+        {name:"Ganko Sushi Shinsaibashi",area:"Shinsaibashi",cuisine:"Sushi",price_per_person:"$20–35",meal:"dinner",must_order:"Chirashi sushi set (value omakase bowl)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Ganko+Sushi+Osaka"},
+        {name:"Ikinari Steak",area:"Namba",cuisine:"Steak",price_per_person:"$18–30",meal:"dinner",must_order:"200g wagyu sirloin, eat standing",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Ikinari+Steak+Osaka"},
+        {name:"Kuromon Market",area:"Namba",cuisine:"Market food",price_per_person:"$10–25",meal:"breakfast",must_order:"Fresh fugu sashimi, wagyu on a stick, fresh uni",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Kuromon+Market+Osaka"},
+      ],
+      mid:[
+        {name:"Ajinoya",area:"Namba",cuisine:"Okonomiyaki",price_per_person:"$20–35",meal:"lunch",must_order:"Osaka-style okonomiyaki (mizuyaki style)",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Ajinoya+okonomiyaki+Osaka"},
+        {name:"Hyotei Osaka",area:"Namba",cuisine:"Fugu (pufferfish)",price_per_person:"$60–100",meal:"dinner",must_order:"Full fugu course — as safe as it gets",reservation:"required",booking_url:"https://www.google.com/search?q=fugu+restaurant+Osaka+Namba"},
+        {name:"Sushi Yoshino",area:"Kitahama",cuisine:"Traditional sushi",price_per_person:"$50–80",meal:"lunch",must_order:"Battera (pressed mackerel sushi) — Osaka's own style",reservation:"recommended",booking_url:"https://www.google.com/search?q=Sushi+Yoshino+Kitahama+Osaka"},
+        {name:"Kani Doraku Dotonbori",area:"Dotonbori",cuisine:"Crab",price_per_person:"$55–90",meal:"dinner",must_order:"Full crab course — the mechanical crab sign restaurant",reservation:"recommended",booking_url:"https://www.google.com/search?q=Kani+Doraku+Dotonbori+Osaka"},
+        {name:"The Bar — W Osaka",area:"Shinsaibashi",cuisine:"Cocktail bar",price_per_person:"$25–50",meal:"late-night",must_order:"Osaka sour + yuzu martini",reservation:"walk-in",booking_url:"https://www.google.com/search?q=The+Bar+W+Osaka"},
+      ],
+      premium:[
+        {name:"Kahala Osaka",area:"Minami",cuisine:"Teppanyaki",price_per_person:"$120–200",meal:"dinner",must_order:"A5 Kobe wagyu teppanyaki",reservation:"required",booking_url:"https://www.google.com/search?q=Kahala+Osaka+teppanyaki+restaurant"},
+        {name:"Fujiya 1935",area:"Higobashi",cuisine:"French-Japanese",price_per_person:"$200–350",meal:"dinner",must_order:"Seasonal French-Japanese tasting menu",reservation:"required",booking_url:"https://www.google.com/search?q=Fujiya+1935+Osaka"},
+        {name:"La Cime",area:"Kitahama",cuisine:"Contemporary French",price_per_person:"$200–350",meal:"dinner",must_order:"Chef's evolution menu — local Japanese ingredients in French technique",reservation:"required",booking_url:"https://www.google.com/search?q=La+Cime+Osaka+restaurant"},
+        {name:"Tsuruse Honten",area:"Kita",cuisine:"Kappo (Osaka fine)",price_per_person:"$100–180",meal:"dinner",must_order:"Counter kappo — watch the chef work while eating",reservation:"required",booking_url:"https://www.google.com/search?q=Tsuruse+Osaka+kappo+restaurant"},
+        {name:"Conrad Osaka Sky Bar",area:"Nakanoshima",cuisine:"Cocktail bar",price_per_person:"$35–65",meal:"late-night",must_order:"Osaka Negroni with local citrus at sunset",reservation:"walk-in",booking_url:"https://www.google.com/search?q=Conrad+Osaka+sky+bar"},
+      ],
+      luxury:[
+        {name:"Mizuno",area:"Dotonbori",cuisine:"Kappo / Teppan",price_per_person:"$250–500",meal:"dinner",must_order:"Full A5 wagyu tasting with sake pairing",reservation:"required",booking_url:"https://www.google.com/search?q=Mizuno+Osaka+luxury+restaurant"},
+        {name:"RyuGin Osaka",area:"Grand Front",cuisine:"3★ Michelin kaiseki",price_per_person:"$300–550",meal:"dinner",must_order:"Full seasonal tasting menu by chef Seiji Yamamoto",reservation:"required months ahead",booking_url:"https://www.google.com/search?q=RyuGin+Osaka+restaurant"},
+        {name:"La Cime",area:"Kitahama",cuisine:"2★ Michelin French-Japanese",price_per_person:"$300–500",meal:"dinner",must_order:"Chef's 12-course with hyper-local Osaka ingredients",reservation:"required months ahead",booking_url:"https://www.google.com/search?q=La+Cime+Osaka+Michelin+reservation"},
+        {name:"Four Seasons Osaka — Ma",area:"Nakanoshima",cuisine:"Private Japanese",price_per_person:"$200–400",meal:"dinner",must_order:"Private kaiseki in a castle-view tatami room",reservation:"hotel guests",booking_url:"https://www.fourseasons.com/osaka/dining/"},
+        {name:"Kigawa Dotonbori Cruise",area:"Dotonbori",cuisine:"Private boat dining",price_per_person:"$100–200",meal:"late-night",must_order:"Private canal boat with sake + Dotonbori lights",reservation:"required",booking_url:"https://www.google.com/search?q=Dotonbori+canal+boat+dinner+Osaka"},
+      ],
+    },
+  },
+};
+
+function AIRecs({ city, tier, type }) {
+  const [show, setShow] = useState(false);
+  const tc = TIER_COLORS[tier];
+  const data = CURATED[city]?.[type]?.[tier] || [];
+  if (!show) return (
+    <button onClick={()=>setShow(true)}
+      style={{width:"100%",padding:"14px",borderRadius:12,border:`2px dashed ${tc.h}40`,background:tc.hbg,color:tc.h,cursor:"pointer",fontSize:13,fontWeight:600}}>
+      ✨ Show {type==="hotels"?"Hotel":"Restaurant"} Picks for {city}
+    </button>
+  );
+  if (type==="hotels") return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:"var(--gray400)"}}>🏨 Curated Hotel Picks — {city}</div>
+        <button onClick={()=>setShow(false)} style={{fontSize:11,color:"var(--gray400)",border:"none",background:"none",cursor:"pointer"}}>↑ Hide</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {data.map((h,i)=>(
+          <div key={i} style={{background:"white",borderRadius:12,padding:"14px 16px",border:`1px solid ${tc.h}20`,boxShadow:"var(--shadow)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:14,fontWeight:700}}>{h.name}</span>
+                  <span style={{fontSize:11,color:"#92600a"}}>{"★".repeat(parseInt(h.stars)||3)}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--gray400)",marginBottom:4}}>📍 {h.area} · {h.price_per_night}/night</div>
+                <div style={{fontSize:12,color:"var(--gray600)",marginBottom:6,lineHeight:1.5}}>{h.why}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {(h.highlights||"").split(",").map((tag,j)=>(
+                    <span key={j} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:100,background:tc.hbg,color:tc.h}}>{tag.trim()}</span>
+                  ))}
+                </div>
+              </div>
+              <a href={h.booking_url} target="_blank" rel="noopener noreferrer"
+                style={{flexShrink:0,padding:"8px 14px",borderRadius:10,background:tc.h,color:"white",textDecoration:"none",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                Book →
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:"var(--gray400)"}}>🍜 Curated Restaurant Picks — {city}</div>
+        <button onClick={()=>setShow(false)} style={{fontSize:11,color:"var(--gray400)",border:"none",background:"none",cursor:"pointer"}}>↑ Hide</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {data.map((r,i)=>{
+          const mealColors={breakfast:"#007a57",lunch:"#0057FF",dinner:"#9333ea","late-night":"#b91c1c"};
+          const mc=mealColors[r.meal]||"var(--gray400)";
+          return (
+            <div key={i} style={{background:"white",borderRadius:12,padding:"12px 16px",border:`1px solid ${mc}20`,boxShadow:"var(--shadow)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                    <span style={{fontSize:13,fontWeight:700}}>{r.name}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:100,background:`${mc}18`,color:mc,textTransform:"capitalize"}}>{r.meal}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"var(--gray400)",marginBottom:3}}>📍 {r.area} · {r.cuisine} · {r.price_per_person}/person</div>
+                  <div style={{fontSize:11,color:"var(--gray600)"}}>🍴 Must order: <strong>{r.must_order}</strong> · {r.reservation}</div>
+                </div>
+                <a href={r.booking_url} target="_blank" rel="noopener noreferrer"
+                  style={{flexShrink:0,padding:"7px 12px",borderRadius:10,background:mc,color:"white",textDecoration:"none",fontSize:11,fontWeight:700}}>
+                  Find →
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+/* ─── FLIGHT TIME PANEL ──────────────────────────────────────────────────────*/
+function FlightPanel({ port, ap, label, dir, flightNum, setFlightNum, flightTime, setFlightTime, isArrival, tier }) {
+  const info = ap.toCity[tier];
+  const refFlight = isArrival ? ap.flightIn : ap.flightOut;
+  const suggestedFlights = isArrival
+    ? [`AC61 (arrives ${ap.code==="NRT"?"15:55":"04:55"})`,"JL72 (arrives 15:30)","Other — enter time manually"]
+    : [`AC62 (departs ${ap.code==="NRT"?"17:30":"22:55"})`,"AC36 (departs 22:55)","Other — enter time manually"];
+
+  const durMins = parseDurMins(info.dur);
+  const bufferMins = ap.code==="NRT" ? 240 : 150;
+  // For arrival: clear immigration 90min after landing, then find next 3 trains
+  const clearanceTime = flightTime && isArrival ? fromMins(toMins(flightTime)+90) : null;
+  const arrivalTrains = clearanceTime ? getNextTrains(info.trains, clearanceTime, durMins, 3) : [];
+  // For departure: find latest safe train + show what time to leave hotel
+  const latestSafe = flightTime && !isArrival ? getLatestSafeTrain(info.trains, flightTime, durMins, bufferMins) : null;
+  const hotelLeaveBy = latestSafe ? fromMins(toMins(latestSafe.time)-20) : null; // 20min to get to station
+
+  return (
+    <div className="card" style={{padding:"18px 20px",borderTop:`4px solid #0057FF`}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#0057FF",letterSpacing:1,marginBottom:10}}>{label} — {dir}</div>
+      <div style={{fontSize:15,fontWeight:800,marginBottom:2}}>{port} — {ap.name}</div>
+      <div style={{fontSize:11,color:"var(--gray400)",marginBottom:12}}>{ap.desc} · {ap.flightNote}</div>
+
+      {/* Flight number input */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:600,color:"var(--gray600)",marginBottom:6}}>Flight Number (optional)</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input type="text" value={flightNum} onChange={e=>setFlightNum(e.target.value.toUpperCase())}
+            placeholder={isArrival?(ap.code==="NRT"?"e.g. AC61":"e.g. AC35"):(ap.code==="NRT"?"e.g. AC62":"e.g. AC36")}
+            style={{flex:1,padding:"8px 12px",borderRadius:10,border:"2px solid var(--gray200)",fontSize:13,color:"var(--text)",outline:"none"}} />
+          {flightNum && (
+            <div style={{fontSize:10,padding:"4px 10px",borderRadius:100,background:"var(--sky)",color:"#0057FF",fontWeight:600,whiteSpace:"nowrap"}}>
+              {isArrival?"Arriving":"Departing"} {port}
+            </div>
+          )}
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+          {suggestedFlights.map((f,i)=>(
+            <button key={i} onClick={()=>{
+              if(!f.includes("manually")) {
+                const num=f.split(" ")[0];
+                setFlightNum(num);
+                const timeMatch=f.match(/(\d{2}:\d{2})/);
+                if(timeMatch) setFlightTime(timeMatch[1]);
+              }
+            }}
+            style={{fontSize:10,padding:"4px 10px",borderRadius:100,border:"1.5px solid var(--gray200)",background:"white",cursor:"pointer",color:"var(--gray600)",fontWeight:500}}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Time picker */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:600,color:"var(--gray600)",marginBottom:6}}>
+          {isArrival?"Arrival Time at "+port:"Departure Time from "+port}
+        </div>
+        <input type="time" value={flightTime} onChange={e=>setFlightTime(e.target.value)}
+          style={{padding:"8px 12px",borderRadius:10,border:"2px solid var(--gray200)",fontSize:14,color:"var(--text)",background:"white",cursor:"pointer",outline:"none"}} />
+        {!flightTime && <span style={{marginLeft:10,fontSize:11,color:"var(--gray400)"}}>Set time for train recommendations</span>}
+      </div>
+
+      {/* Smart train recommendation — 3 options for arrival, latest-safe for departure */}
+      {flightTime && isArrival && arrivalTrains.length > 0 && (
+        <div style={{background:"var(--sky)",borderRadius:12,padding:"12px 14px",marginBottom:10,border:"1.5px solid #0057FF30"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#0057FF",marginBottom:8}}>
+            🚂 Transfer Options — clear immigration ~{clearanceTime}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {arrivalTrains.map((tr,i)=>{
+              const tl = timingLabel(tr.waitMins);
+              const isRec = i===0;
+              return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:isRec?"white":"rgba(255,255,255,0.5)",border:isRec?"2px solid #0057FF":"1px solid rgba(0,87,255,0.15)",boxShadow:isRec?"0 2px 8px rgba(0,87,255,0.12)":"none"}}>
+                  {isRec && <div style={{fontSize:10,fontWeight:800,color:"white",background:"#0057FF",padding:"2px 7px",borderRadius:100,flexShrink:0}}>CATCH</div>}
+                  {!isRec && <div style={{fontSize:10,fontWeight:600,color:"var(--gray400)",padding:"2px 7px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>+{Math.round(toMins(tr.time)-toMins(arrivalTrains[0].time))}m</div>}
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:800,color:isRec?"#0057FF":"var(--gray600)"}}>{tr.time}</div>
+                    <div style={{fontSize:10,color:"var(--gray400)"}}>arrives Tokyo ~{tr.arrive}</div>
+                  </div>
+                  <div style={{fontSize:10,fontWeight:600,color:isRec?"#007a57":"var(--gray400)"}}>{isRec?"✓ Best option":""}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{marginTop:8,fontSize:11,color:"var(--gray600)"}}>
+            🏨 On the <strong style={{color:"#0057FF"}}>{arrivalTrains[0]?.time}</strong> train → arrive central Tokyo <strong>{arrivalTrains[0]?.arrive}</strong>
+          </div>
+        </div>
+      )}
+      {flightTime && !isArrival && (
+        <div style={{background:"#fff8f8",borderRadius:12,padding:"12px 14px",marginBottom:10,border:"1.5px solid #b91c1c30"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#b91c1c",marginBottom:8}}>⏰ Your Departure Timeline</div>
+          {latestSafe ? (
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,background:"white",border:"2px solid #b91c1c",marginBottom:6,boxShadow:"0 2px 8px rgba(185,28,28,0.1)"}}>
+                <div style={{fontSize:10,fontWeight:800,color:"white",background:"#b91c1c",padding:"2px 7px",borderRadius:100,flexShrink:0}}>LATEST</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:800,color:"#b91c1c"}}>{latestSafe.time}</div>
+                  <div style={{fontSize:10,color:"var(--gray400)"}}>arrives {ap.code} ~{latestSafe.arrive}</div>
+                </div>
+                <div style={{fontSize:10,color:"#007a57",fontWeight:600}}>{latestSafe.bufferLeft>=60?`+${Math.round(latestSafe.bufferLeft/60)}h buffer`:latestSafe.bufferLeft>0?`+${latestSafe.bufferLeft}m buffer`:"⚠ Tight"}</div>
+              </div>
+              <div style={{fontSize:11,color:"var(--gray600)",lineHeight:1.8}}>
+                <div>🏨 Leave hotel by <strong style={{color:"#b91c1c"}}>{hotelLeaveBy}</strong> (20min to station)</div>
+                <div>🚂 Catch <strong>{info.mode.split("—")[0].trim()}</strong> at <strong style={{color:"#b91c1c"}}>{latestSafe.time}</strong></div>
+                <div>✈️ Arrive {ap.code} ~{latestSafe.arrive} · Flight at <strong>{flightTime}</strong></div>
+              </div>
+            </>
+          ) : (
+            <div style={{fontSize:11,color:"#b91c1c",fontWeight:600}}>⚠ No safe train found — consider private car or earlier flight</div>
+          )}
+          <div style={{marginTop:8,fontSize:10,color:"var(--gray400)",fontStyle:"italic"}}>{ap.code==="NRT"?"Narita: allow 3h at airport (immigration + check-in + security)":"Haneda: allow 2.5h at international terminal"}</div>
+        </div>
+      )}
+
+      {/* Transfer cost */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:10,borderTop:"1px solid var(--gray100)"}}>
+        <div>
+          <div style={{fontSize:12,color:"var(--gray600)"}}>🚌 {info.mode}</div>
+          <div style={{fontSize:11,color:"var(--gray400)"}}>⏱ {info.dur} journey</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:20,fontWeight:900,color:"#0057FF"}}>${info.cost*2}</div>
+          <div style={{fontSize:10,color:"var(--gray400)"}}>2 pax</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── LEAFLET MAP ────────────────────────────────────────────────────────────*/
+function LeafletMap({city}) {
+  const mapData = CITY_MAPS[city];
+  const SC = {hotel:"#0057FF",temple:"#92600a",attraction:"#9333ea",nature:"#007a57",train:"#b91c1c"};
+  const SE = {hotel:"🏨",temple:"⛩️",attraction:"🎭",nature:"🌿",train:"🚉"};
+  const html = useMemo(()=>{
+    if(!mapData) return "";
+    const markers = mapData.spots.map(s=>{
+      const c=SC[s.type]||"#333", e=SE[s.type]||"📍";
+      return `L.marker([${s.lat},${s.lng}],{icon:L.divIcon({className:'',html:'<div style="background:white;border:2.5px solid ${c};border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 12px ${c}55">${e}</div>',iconSize:[34,34],iconAnchor:[17,17]})}).addTo(map).bindPopup('<div style="font-family:DM Sans,sans-serif;padding:2px"><b style="font-size:13px">${s.name}</b><br><span style="font-size:10px;color:${c};text-transform:capitalize">${s.type}</span></div>');`;
+    }).join("");
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script><style>*{margin:0;padding:0}html,body,#m{width:100%;height:100%}.leaflet-popup-content-wrapper{background:#fff;border:none;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.12)}.leaflet-popup-tip{background:#fff}.leaflet-control-zoom a{background:#fff!important;color:#0057FF!important;border-color:#e8f0ff!important;border-radius:8px!important;margin-bottom:4px}.leaflet-control-zoom{border:none!important;box-shadow:0 4px 16px rgba(0,0,0,.1)!important}.leaflet-control-attribution{background:rgba(255,255,255,.8)!important;font-size:8px!important;border-radius:8px!important}</style></head><body><div id="m"></div><script>var map=L.map('m',{center:[${mapData.lat},${mapData.lng}],zoom:${mapData.zoom},zoomControl:true});L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CartoDB'}).addTo(map);${markers}<\/script></body></html>`;
+  },[city]);
+  return <iframe srcDoc={html} style={{width:"100%",height:"100%",border:"none",borderRadius:"inherit"}} title="map" sandbox="allow-scripts"/>;
+}
+
+/* ─── EDIT ROW ───────────────────────────────────────────────────────────────*/
+function EditRow({label,value,onSave,accent}) {
+  const [editing,setEditing] = useState(false);
+  const [draft,setDraft] = useState(value);
+  useEffect(()=>{setDraft(value);},[value]);
+  const commit = v => { onSave(Math.max(0,Number(v))); setEditing(false); };
+  return (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--gray100)"}}>
+      <span style={{fontSize:13,color:"var(--gray600)",fontWeight:500}}>{label}</span>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        {editing
+          ? <input type="number" value={draft} autoFocus onChange={e=>setDraft(e.target.value)} onBlur={()=>commit(draft)} onKeyDown={e=>{if(e.key==="Enter")commit(draft);if(e.key==="Escape")setEditing(false);}}
+              style={{width:72,border:`2px solid ${accent}`,borderRadius:8,padding:"4px 8px",color:"var(--text)",fontSize:14,textAlign:"right",outline:"none"}}/>
+          : <span style={{fontSize:15,fontWeight:700,color:value===0?"#007a57":accent,minWidth:52,textAlign:"right"}}>{value===0?"Free":`$${value}`}</span>}
+        <button onClick={()=>setEditing(x=>!x)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${editing?accent:"var(--gray200)"}`,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s",background:editing?accent:"white",color:editing?"white":"var(--gray400)"}}>
+          {editing?"✓":"✏️"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ─── MAIN APP ───────────────────────────────────────────────────────────────*/
+function App() {
+  const [budget, setBudget] = useState(6500);
+  const [entryPort, setEntryPort] = useState("NRT");
+  const [exitPort,  setExitPort]  = useState("HND");
+  const [cityNights, setCityNights] = useState({Tokyo:4,Hakone:1,Kyoto:3,Osaka:2});
+  const [overrides, setOverrides] = useState({});
+  const [activeTab, setActiveTab] = useState("itinerary");
+  const [selIdx, setSelIdx] = useState(0);
+  const [mapCity, setMapCity] = useState("Tokyo");
+  // Flight time state
+  const [arrivalTime,  setArrivalTime]  = useState("");
+  const [departureTime,setDepartureTime]= useState("");
+  const [arrFlightNum, setArrFlightNum] = useState("");
+  const [depFlightNum, setDepFlightNum] = useState("");
+  // Hotel check-in/out dates (for AI context)
+  const [tripStartDate, setTripStartDate] = useState("");
+  const [tripEndDate,   setTripEndDate]   = useState("");
+  // Hotels/restaurants tab sub-view
+  const [recsCity, setRecsCity] = useState("Tokyo");
+  const [recsType, setRecsType] = useState("hotels");
+
+  const tier = getTier(budget);
+  const tc = TIER_COLORS[tier];
+  const tm = TIER_META[tier];
+  const entryAp = AIRPORTS[entryPort];
+  const exitAp  = AIRPORTS[exitPort];
+
+  const schedule = useMemo(() => {
+    const days=[]; let n=1;
+    const active=CITY_ORDER.filter(c=>(cityNights[c]||0)>0);
+    const lastActive=active[active.length-1];
+    active.forEach((city,ci)=>{
+      const nights=cityNights[city]||0;
+      const tmpls=TMPLS[city]||[];
+      const prev=ci>0?active[ci-1]:null;
+      const cityIsDep=city==="Tokyo"&&ci===active.length-1;
+      for(let i=0;i<nights;i++){
+        const tpl=tmpls[Math.min(i,tmpls.length-1)];
+        if(!tpl) continue;
+        days.push({dayNum:n++,city,template:tpl,prevCity:prev,
+          isArrival:ci===0&&i===0, isDeparture:cityIsDep&&i===nights-1,
+          transition:i===0&&prev?getTr(prev,city):null});
+      }
+    });
+    if(lastActive&&lastActive!=="Tokyo"){
+      const depTpl={
+        emoji:"✈️",
+        theme:`Departure Day — ${exitPort} → YYZ`,
+        highlight:exitPort==="NRT"?"Narita: allow 4–5h before departure — large airport":"Haneda: 30 min from Tokyo — still allow 2–3h",
+        accom:{budget:0,mid:0,premium:0,luxury:0},
+        food:{budget:20,mid:40,premium:80,luxury:150},
+        activities:{budget:10,mid:20,premium:40,luxury:80},
+        transport:{budget:8,mid:15,premium:30,luxury:60},
+        acts:{
+          budget:[{t:"AM",n:"Final conbini breakfast",c:5},{t:"Midday",n:"Last-minute gifts",c:15}],
+          mid:[{t:"AM",n:"Hotel breakfast + Shinjuku Gyoen",c:10},{t:"Midday",n:"Shibuya last souvenir run",c:30}],
+          premium:[{t:"AM",n:"Hotel breakfast + Yanaka walk",c:30},{t:"Midday",n:"Takashimaya souvenir",c:80}],
+          luxury:[{t:"AM",n:"Aman breakfast + final spa",c:0},{t:"Midday",n:"Personal shopper",c:150}],
+        },
+      };
+      const retTr=RETURN_TRAINS[lastActive];
+      const returnTrans=retTr?{line:retTr.line,dur:retTr.dur,color:"#0057FF",perPerson:retTr.perPerson,note:retTr.note}:null;
+      days.push({dayNum:n++,city:"Tokyo",template:depTpl,prevCity:lastActive,
+        isArrival:false,isDeparture:true,isReturnDay:true,transition:returnTrans});
+    }
+    return days;
+  }, [cityNights,exitPort]);
+
+  useEffect(()=>{if(selIdx>=schedule.length)setSelIdx(Math.max(0,schedule.length-1));},[schedule.length]);
+
+  const costs = d => {
+    const ov=overrides[`${d.city}-${d.dayNum}`]||{};
+    const t=d.template;
+    const ac=ov.accom!==undefined?ov.accom:(t.accom[tier]||0);
+    const fo=ov.food!==undefined?ov.food:(t.food[tier]||0);
+    const av=ov.activities!==undefined?ov.activities:(t.activities[tier]||0);
+    const tr=ov.transport!==undefined?ov.transport:(t.transport[tier]||0);
+    const tn=d.transition?d.transition.perPerson[tier]*2:0;
+    const en=d.isArrival?entryAp.toCity[tier].cost*2:0;
+    const ex=d.isDeparture?exitAp.toCity[tier].cost*2:0;
+    return {ac,fo,av,tr,tn,en,ex,total:ac+fo+av+tr+tn+en+ex};
+  };
+  const setOv=(d,key,val)=>{const k=`${d.city}-${d.dayNum}`;setOverrides(p=>({...p,[k]:{...(p[k]||{}),[key]:val}}));};
+  const grandTotal=useMemo(()=>schedule.reduce((s,d)=>s+costs(d).total,0),[schedule,overrides,tier,entryPort,exitPort]);
+  const changeNights=(city,delta)=>{const min=city==="Tokyo"?1:0;setCityNights(p=>({...p,[city]:Math.max(min,Math.min(10,(p[city]||0)+delta))}));};
+
+  const pct=Math.min(100,((budget-1500)/(15000-1500))*100);
+  const sel=schedule[selIdx];
+  const active=CITY_ORDER.filter(c=>(cityNights[c]||0)>0);
+  const lastCity=active[active.length-1];
+  const needsReturn=lastCity&&lastCity!=="Tokyo";
+
+  const TABS=[
+    {id:"itinerary",label:"Day Plan",icon:"📅"},
+    {id:"budget",   label:"Budget",  icon:"💰"},
+    {id:"recs",     label:"Hotels & Eats",icon:"🏨"},
+    {id:"map",      label:"Map",     icon:"🗺️"},
+    {id:"trains",   label:"Trains",  icon:"🚄"},
+  ];
+
+  // Arrival: next 3 trains after clearing immigration (90min after landing)
+  const arrivalClearTime = arrivalTime ? fromMins(toMins(arrivalTime)+90) : null;
+  const arrivalTrains = arrivalClearTime
+    ? getNextTrains(entryAp.toCity[tier].trains, arrivalClearTime, parseDurMins(entryAp.toCity[tier].dur), 3)
+    : [];
+  // Departure: latest safe train + hotel leave time
+  const depBufMins = exitPort==="NRT" ? 240 : 150;
+  const depDurMins = parseDurMins(exitAp.toCity[tier].dur);
+  const latestSafeDep = departureTime
+    ? getLatestSafeTrain(exitAp.toCity[tier].trains, departureTime, depDurMins, depBufMins)
+    : null;
+  const hotelLeaveByDep = latestSafeDep ? fromMins(toMins(latestSafeDep.time)-20) : null;
+
+  return (
+    <>
+      <style>{FONTS}</style>
+
+      {/* ── HERO ── */}
+      <div style={{position:"relative",background:"var(--navy)",overflow:"hidden",minHeight:200,paddingBottom:32}}>
+        <div className="orb" style={{width:600,height:600,background:"radial-gradient(circle,rgba(0,87,255,0.35),transparent 70%)",top:-200,left:-100,animationDelay:"0s"}}/>
+        <div className="orb" style={{width:500,height:500,background:"radial-gradient(circle,rgba(99,102,241,0.25),transparent 70%)",top:-100,right:-50,animationDelay:"3s"}}/>
+        <div className="orb" style={{width:300,height:300,background:"radial-gradient(circle,rgba(0,196,140,0.15),transparent 70%)",bottom:-100,left:"40%",animationDelay:"5s"}}/>
+        <div style={{position:"relative",zIndex:1,maxWidth:900,margin:"0 auto",padding:"28px 24px 0"}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(0,87,255,0.25)",border:"1px solid rgba(0,87,255,0.4)",borderRadius:100,padding:"6px 14px",marginBottom:20}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:"#007a57"}}/>
+            <span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.85)",letterSpacing:0.8}}>YYZ → JAPAN · OCTOBER · 2 ADULTS</span>
+          </div>
+          <h1 style={{fontFamily:"'DM Serif Display',serif",fontSize:"clamp(28px,5vw,52px)",color:"white",fontWeight:400,lineHeight:1.1,marginBottom:10}}>Japan Trip Planner</h1>
+          <p style={{fontSize:14,color:"rgba(255,255,255,0.5)",marginBottom:28,maxWidth:500,lineHeight:1.6}}>
+            Flying from Toronto YYZ · {schedule.length} days · AI hotel & restaurant picks · Live train times
+          </p>
+          {/* Route bar */}
+          <div className="glass" style={{borderRadius:14,padding:"14px 18px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,fontWeight:700,color:"var(--gray600)"}}>YYZ</span>
+            <span style={{color:"var(--gray400)",fontSize:18}}>→</span>
+            <span style={{background:"#e8f0ff",color:"#0057FF",fontWeight:700,fontSize:12,borderRadius:100,padding:"4px 12px",border:"1.5px solid #0057FF"}}>{entryPort}</span>
+            <span style={{color:"var(--gray400)",fontSize:18}}>→</span>
+            {active.map((city,i)=>[
+              <span key={city} style={{background:`${CC[city]}15`,color:CC[city],fontWeight:700,fontSize:12,borderRadius:100,padding:"4px 12px",border:`1.5px solid ${CC[city]}`}}>{CE[city]} {city} · {cityNights[city]}n</span>,
+              i<active.length-1&&<span key={`a${i}`} style={{color:"var(--gray400)",fontSize:18}}>→</span>
+            ])}
+            <span style={{color:"var(--gray400)",fontSize:18}}>→</span>
+            <span style={{background:"#e8f0ff",color:"#0057FF",fontWeight:700,fontSize:12,borderRadius:100,padding:"4px 12px",border:"1.5px solid #0057FF"}}>{exitPort}</span>
+            <span style={{color:"var(--gray400)",fontSize:18}}>→</span>
+            <span style={{fontSize:11,fontWeight:700,color:"var(--gray600)"}}>YYZ</span>
+            <div style={{marginLeft:"auto",textAlign:"right"}}>
+              <div style={{fontSize:13,fontWeight:700,color:grandTotal<=budget?"#007a57":"#b91c1c"}}>
+                {grandTotal<=budget?`✓ $${(budget-grandTotal).toLocaleString()} under`:`⚠ $${(grandTotal-budget).toLocaleString()} over`}
+              </div>
+              <div style={{fontSize:11,color:"var(--gray400)"}}>budget</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 60px"}}>
+
+        {/* ── FLIGHT TIMES ── */}
+        <div className="card" style={{padding:24,marginBottom:20}}>
+          <div className="section-label">✈️ Flight Times — YYZ ↔ Tokyo</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+            <FlightPanel port={entryPort} ap={entryAp} label="🛬 Fly In" dir="YYZ → Tokyo"
+              flightNum={arrFlightNum} setFlightNum={setArrFlightNum}
+              flightTime={arrivalTime} setFlightTime={setArrivalTime}
+              isArrival={true} tier={tier}/>
+            <FlightPanel port={exitPort} ap={exitAp} label="🛫 Fly Out" dir="Tokyo → YYZ"
+              flightNum={depFlightNum} setFlightNum={setDepFlightNum}
+              flightTime={departureTime} setFlightTime={setDepartureTime}
+              isArrival={false} tier={tier}/>
+          </div>
+          {/* Airport selector pills */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:"var(--gray600)",marginBottom:8}}>Entry Airport</div>
+              <div style={{display:"flex",gap:8}}>
+                {["NRT","HND"].map(code=>(
+                  <button key={code} onClick={()=>setEntryPort(code)}
+                    style={{flex:1,padding:"10px",borderRadius:12,cursor:"pointer",border:`2px solid ${entryPort===code?"#0057FF":"var(--gray200)"}`,background:entryPort===code?"#e8f0ff":"white",color:entryPort===code?"#0057FF":"var(--gray600)",fontWeight:700,fontSize:13,transition:"all 0.2s"}}>
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:"var(--gray600)",marginBottom:8}}>Exit Airport</div>
+              <div style={{display:"flex",gap:8}}>
+                {["NRT","HND"].map(code=>(
+                  <button key={code} onClick={()=>setExitPort(code)}
+                    style={{flex:1,padding:"10px",borderRadius:12,cursor:"pointer",border:`2px solid ${exitPort===code?"#0057FF":"var(--gray200)"}`,background:exitPort===code?"#e8f0ff":"white",color:exitPort===code?"#0057FF":"var(--gray600)",fontWeight:700,fontSize:13,transition:"all 0.2s"}}>
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{marginTop:12,padding:"10px 14px",background:"var(--sky)",borderRadius:10,fontSize:12,color:"#0057FF",fontWeight:500}}>
+            💡 <strong>Pro tip:</strong> NRT in + HND out is popular — enter times above and we'll calculate exact trains to catch.
+          </div>
+        </div>
+
+        {/* ── BUDGET ── */}
+        <div className="card" style={{padding:24,marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16,marginBottom:20}}>
+            <div>
+              <div className="section-label">Budget & Experience Tier</div>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:48,height:48,borderRadius:14,background:tc.hbg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,border:`2px solid ${tc.h}30`}}>{tm.icon}</div>
+                <div>
+                  <div style={{fontSize:20,fontWeight:800,color:tc.h}}>{tm.label}</div>
+                  <div style={{fontSize:12,color:"var(--gray400)",marginTop:1}}>{tm.sub}</div>
+                </div>
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:36,fontWeight:900,color:tc.h,lineHeight:1}}>${budget.toLocaleString()}</div>
+              <div style={{fontSize:11,color:"var(--gray400)",fontWeight:600,letterSpacing:0.5,marginTop:2}}>TOTAL BUDGET · 2 ADULTS</div>
+              <div style={{marginTop:4,fontSize:13,fontWeight:600,color:grandTotal<=budget?"#007a57":"#b91c1c"}}>Spending: ${grandTotal.toLocaleString()}</div>
+            </div>
+          </div>
+          <div style={{position:"relative",marginBottom:16}}>
+            <div style={{height:6,borderRadius:3,background:"var(--gray100)",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:0,height:"100%",width:`${pct}%`,borderRadius:3,background:`linear-gradient(90deg,#007a57,${tc.h})`,transition:"width 0.1s"}}/>
+            </div>
+            <input type="range" min={1500} max={15000} step={100} value={budget} onChange={e=>setBudget(Number(e.target.value))}
+              style={{position:"absolute",inset:0,width:"100%",opacity:0,cursor:"pointer",height:6,marginTop:0}}/>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {Object.entries(TIER_META).map(([k,t])=>{const tc2=TIER_COLORS[k];const isSel=tier===k;return(
+              <button key={k} onClick={()=>setBudget(t.budgetVal)}
+                style={{padding:"8px 18px",borderRadius:100,border:`2px solid ${isSel?tc2.h:tc2.h+"30"}`,cursor:"pointer",background:isSel?tc2.hbg:"white",color:isSel?tc2.h:"var(--gray400)",fontWeight:isSel?700:500,fontSize:13,transition:"all 0.2s",fontFamily:"'DM Sans',sans-serif"}}>
+                {t.icon} {t.label}
+              </button>
+            );})}
+            <div style={{marginLeft:"auto",background:grandTotal<=budget?"#e6faf4":"#fff2f2",border:`1.5px solid ${grandTotal<=budget?"#007a57":"#b91c1c"}`,borderRadius:100,padding:"8px 18px",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:14,fontWeight:800,color:grandTotal<=budget?"#007a57":"#b91c1c"}}>${grandTotal.toLocaleString()}</span>
+              <span style={{fontSize:11,color:"var(--gray400)",fontWeight:500}}>{grandTotal<=budget?`✓ $${(budget-grandTotal).toLocaleString()} under`:`⚠ $${(grandTotal-budget).toLocaleString()} over`}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CITY DURATION ── */}
+        <div className="card" style={{padding:24,marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
+            <div className="section-label" style={{marginBottom:0}}>📅 City Stays — {schedule.length} days total</div>
+            {/* Trip date pickers */}
+            <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:"var(--gray400)",marginBottom:3}}>ARRIVAL DATE</div>
+                <input type="date" value={tripStartDate} onChange={e=>setTripStartDate(e.target.value)}
+                  style={{padding:"6px 10px",borderRadius:10,border:"2px solid var(--gray200)",fontSize:12,color:"var(--text)",outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:"var(--gray400)",marginBottom:3}}>DEPARTURE DATE</div>
+                <input type="date" value={tripEndDate} onChange={e=>setTripEndDate(e.target.value)}
+                  style={{padding:"6px 10px",borderRadius:10,border:"2px solid var(--gray200)",fontSize:12,color:"var(--text)",outline:"none"}}/>
+              </div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+            {CITY_ORDER.map(city=>{
+              const n=cityNights[city]||0, cc=CC[city];
+              return(
+                <div key={city} style={{textAlign:"center",padding:"16px 12px",borderRadius:14,border:`2px solid ${n>0?cc+"40":"var(--gray200)"}`,background:n>0?`${cc}08`:"var(--gray50)",transition:"all 0.25s"}}>
+                  <div style={{fontSize:24,marginBottom:4}}>{CE[city]}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:n>0?cc:"var(--gray400)",marginBottom:2}}>{city}</div>
+                  <div style={{fontSize:9,color:"var(--gray400)",fontWeight:600,marginBottom:10}}>{city==="Tokyo"?"ENTRY + EXIT":"OPTIONAL"}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                    <button onClick={()=>changeNights(city,-1)} style={{width:28,height:28,borderRadius:8,border:"1.5px solid var(--gray200)",background:"white",color:"var(--gray600)",cursor:"pointer",fontSize:16,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                    <div><div style={{fontSize:20,fontWeight:900,color:n>0?cc:"var(--gray400)",lineHeight:1}}>{n}</div><div style={{fontSize:9,color:"var(--gray400)",fontWeight:600}}>NTS</div></div>
+                    <button onClick={()=>changeNights(city,1)} style={{width:28,height:28,borderRadius:8,border:`1.5px solid ${cc}`,background:cc,color:"white",cursor:"pointer",fontSize:16,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{height:8,borderRadius:4,display:"flex",overflow:"hidden",gap:1}}>
+            {schedule.map((d,i)=>(
+              <div key={i} onClick={()=>setSelIdx(i)} title={`Day ${d.dayNum} — ${d.city}`}
+                style={{flex:1,background:CC[d.city],cursor:"pointer",opacity:selIdx===i?1:0.5,transition:"opacity 0.2s",borderRadius:2}}/>
+            ))}
+          </div>
+        </div>
+
+        {/* ── TAB NAV ── */}
+        <div style={{display:"flex",gap:4,background:"white",borderRadius:14,padding:6,marginBottom:20,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)",overflowX:"auto"}}>
+          {TABS.map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+              style={{flex:1,padding:"10px 8px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600,transition:"all 0.25s",whiteSpace:"nowrap",background:activeTab===tab.id?tc.h:"transparent",color:activeTab===tab.id?"white":"var(--gray400)"}}>
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── DAY PILLS ── */}
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:8,marginBottom:20,scrollbarWidth:"none"}}>
+          {schedule.map((d,i)=>{
+            const cc=CC[d.city],isSel=i===selIdx,c=costs(d);
+            return(
+              <button key={i} onClick={()=>{setSelIdx(i);setMapCity(d.city);setRecsCity(d.city);}}
+                style={{flexShrink:0,padding:"10px 14px",borderRadius:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.25s",textAlign:"center",minWidth:70,
+                  background:isSel?cc:"white",border:isSel?"none":`1.5px solid ${cc}30`,boxShadow:isSel?`0 4px 16px ${cc}40`:"var(--shadow)",color:isSel?"white":"var(--text)"}}>
+                <div style={{fontSize:16,marginBottom:2}}>{d.template.emoji}</div>
+                <div style={{fontSize:10,fontWeight:700}}>Day {d.dayNum}</div>
+                <div style={{fontSize:9,opacity:0.75}}>{d.city}</div>
+                <div style={{fontSize:11,fontWeight:700,marginTop:3}}>${c.total}</div>
+              </button>
+            );
+          })}
+        </div>
+
+
+        {/* ── TAB: ITINERARY & BUDGET ── */}
+        {(activeTab==="itinerary"||activeTab==="budget")&&sel&&(()=>{
+          const c=costs(sel),cc=CC[sel.city],acts=sel.template.acts[tier]||[];
+          return(
+            <div className="fade-up">
+              <div style={{borderRadius:20,overflow:"hidden",marginBottom:16,boxShadow:"var(--shadow-lg)",border:`1px solid ${cc}20`}}>
+                <div style={{background:`linear-gradient(135deg,${cc}ee,${cc}bb)`,padding:"24px 24px 20px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+                    <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                      <div style={{width:56,height:56,borderRadius:16,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,backdropFilter:"blur(8px)"}}>{sel.template.emoji}</div>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>
+                          Day {sel.dayNum} · {sel.city}
+                          {sel.isArrival&&arrivalTime&&<span style={{marginLeft:8,background:"rgba(255,255,255,0.25)",padding:"2px 8px",borderRadius:100,fontSize:10}}>🛬 Landing {arrivalTime}</span>}
+                          {sel.isDeparture&&departureTime&&<span style={{marginLeft:8,background:"rgba(255,255,255,0.25)",padding:"2px 8px",borderRadius:100,fontSize:10}}>🛫 Departing {departureTime}</span>}
+                        </div>
+                        <h2 style={{fontFamily:"'DM Serif Display',serif",fontWeight:400,fontSize:22,color:"white",lineHeight:1.2}}>{sel.template.theme}</h2>
+                      </div>
+                    </div>
+                    <div style={{background:"rgba(255,255,255,0.2)",backdropFilter:"blur(8px)",borderRadius:14,padding:"12px 20px",textAlign:"center",border:"1px solid rgba(255,255,255,0.3)"}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:600,letterSpacing:0.5}}>DAY TOTAL</div>
+                      <div style={{fontSize:28,fontWeight:900,color:"white",lineHeight:1}}>${c.total}</div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.6)"}}>2 adults</div>
+                    </div>
+                  </div>
+                  <div style={{marginTop:14,padding:"10px 14px",background:"rgba(255,255,255,0.15)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.9)",fontStyle:"italic",backdropFilter:"blur(4px)"}}>
+                    ✦ {sel.template.highlight}
+                  </div>
+                </div>
+
+                <div style={{background:"white",padding:24}}>
+                  {/* Arrival banner with smart train info */}
+                  {sel.isArrival&&(
+                    <div style={{marginBottom:16}}>
+                      <div style={{padding:"14px 16px",background:"var(--sky)",borderRadius:12,border:"1.5px solid #0057FF30"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0057FF",marginBottom:3}}>🛬 Arriving at {entryAp.name} ({entryPort})</div>
+                        <div style={{fontSize:11,color:"var(--gray600)"}}>{entryAp.flightNote}</div>
+                        {arrivalTime&&<div style={{fontSize:11,color:"var(--gray600)"}}>✈️ Your flight lands at <strong>{arrivalTime}</strong></div>}
+                        <div style={{fontSize:11,color:"var(--gray600)"}}>🚌 {entryAp.toCity[tier].mode} · ⏱ {entryAp.toCity[tier].dur} to central Tokyo</div>
+                        {arrivalTrains.length>0&&(
+                          <div style={{marginTop:10,background:"white",borderRadius:10,padding:"10px 12px",border:"1px solid #0057FF20"}}>
+                            <div style={{fontSize:11,fontWeight:700,color:"#0057FF",marginBottom:8}}>🚂 Transfer Options — clear immigration ~{arrivalClearTime}</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                              {arrivalTrains.map((tr,i)=>(
+                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,background:i===0?"#e8f0ff":"var(--gray50)",border:i===0?"1.5px solid #0057FF":"1px solid var(--gray100)"}}>
+                                  {i===0&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#0057FF",padding:"1px 6px",borderRadius:100,flexShrink:0}}>CATCH</span>}
+                                  {i>0&&<span style={{fontSize:9,color:"var(--gray400)",padding:"1px 6px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>+{Math.round(toMins(tr.time)-toMins(arrivalTrains[0].time))}m later</span>}
+                                  <span style={{fontSize:13,fontWeight:800,color:i===0?"#0057FF":"var(--gray600)"}}>{tr.time}</span>
+                                  <span style={{fontSize:10,color:"var(--gray400)"}}>→ arrives ~{tr.arrive}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                          <span style={{fontSize:18,fontWeight:800,color:"#0057FF"}}>${entryAp.toCity[tier].cost*2}</span>
+                          <span style={{fontSize:10,color:"var(--gray400)",alignSelf:"flex-end",marginLeft:4}}>2 pax</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Transition train */}
+                  {sel.transition&&(()=>{
+                    const tr=sel.transition,pp=tr.perPerson[tier];
+                    const tip=sel.isReturnDay?RETURN_TRAINS[sel.prevCity]?.tips[exitPort]:null;
+                    return(
+                      <div style={{padding:"14px 16px",background:`${tr.color}0d`,borderRadius:12,marginBottom:16,border:`1.5px solid ${tr.color}30`}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:700,color:tr.color,marginBottom:3}}>🚄 {sel.prevCity} → {sel.isReturnDay?"Tokyo":sel.city} — {tr.line}</div>
+                            <div style={{fontSize:11,color:"var(--gray600)"}}>{tr.note[tier]} · ⏱ {tr.dur}</div>
+                            {/* Next 3 trains — recommended one highlighted */}
+                            {(()=>{
+                              const key=`${sel.prevCity}→${sel.isReturnDay?"Tokyo":sel.city}`;
+                              const allT=(TRANSITIONS[key]||RETURN_TRAINS[sel.prevCity]||{}).trains||[];
+                              // Suggest trains from 08:00 default (user would leave after breakfast)
+                              const startFrom = "08:00";
+                              const durM = parseDurMins(tr.dur);
+                              const opts = getNextTrains(allT, startFrom, durM, 3);
+                              if(!opts.length) return null;
+                              return(
+                                <div style={{marginTop:8}}>
+                                  <div style={{fontSize:10,color:"var(--gray400)",fontWeight:600,marginBottom:5,letterSpacing:0.5}}>RECOMMENDED DEPARTURES</div>
+                                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                                    {opts.map((opt,i)=>(
+                                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:8,background:i===0?`${tr.color}15`:"var(--gray50)",border:i===0?`1.5px solid ${tr.color}`:"1px solid var(--gray100)"}}>
+                                        {i===0&&<span style={{fontSize:9,fontWeight:800,color:"white",background:tr.color,padding:"1px 6px",borderRadius:100,flexShrink:0}}>BEST</span>}
+                                        {i>0&&<span style={{fontSize:9,color:"var(--gray400)",padding:"1px 6px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>+{Math.round(toMins(opt.time)-toMins(opts[0].time))}m</span>}
+                                        <span style={{fontSize:13,fontWeight:800,color:i===0?tr.color:"var(--gray600)"}}>{opt.time}</span>
+                                        <span style={{fontSize:10,color:"var(--gray400)"}}>→ arrives ~{opt.arrive}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:18,fontWeight:800,color:pp===0?"#007a57":tr.color}}>{pp===0?"JR Pass":"$"+(pp*2)}</div>
+                            {pp>0&&<div style={{fontSize:10,color:"var(--gray400)"}}>${pp}/person</div>}
+                          </div>
+                        </div>
+                        {tip&&<div style={{marginTop:10,padding:"8px 12px",background:"var(--sky)",borderRadius:8,fontSize:11,color:"var(--gray600)",lineHeight:1.6}}>📋 {tip}</div>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Activities */}
+                  {activeTab==="itinerary"&&acts.length>0&&(
+                    <div style={{marginBottom:16}}>
+                      {acts.map((act,i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<acts.length-1?"1px solid var(--gray100)":"none"}}>
+                          <div style={{display:"flex",gap:12,flex:1,alignItems:"flex-start"}}>
+                            <span style={{fontSize:10,fontWeight:700,color:cc,flexShrink:0,background:`${cc}15`,borderRadius:6,padding:"3px 8px",textAlign:"center",minWidth:48}}>{act.t}</span>
+                            <span style={{fontSize:13,color:"var(--text)",lineHeight:1.5}}>{act.n}</span>
+                          </div>
+                          <span style={{fontSize:13,fontWeight:700,color:act.c===0?"#007a57":"var(--gray600)",flexShrink:0,background:act.c===0?"#e6faf4":"var(--gray50)",borderRadius:8,padding:"3px 10px"}}>{act.c===0?"Free":`$${act.c}`}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Departure banner */}
+                  {sel.isDeparture&&(
+                    <div style={{marginTop:8}}>
+                      <div style={{padding:"14px 16px",background:"var(--sky)",borderRadius:12,border:"1.5px solid #0057FF30"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0057FF",marginBottom:3}}>🛫 {exitAp.name} ({exitPort}) → YYZ</div>
+                        {departureTime&&<div style={{fontSize:11,color:"var(--gray600)"}}>✈️ Your flight departs at <strong>{departureTime}</strong></div>}
+                        <div style={{fontSize:11,color:"var(--gray600)"}}>🚌 {exitAp.toCity[tier].mode} · ⏱ {exitAp.toCity[tier].dur} from central Tokyo</div>
+                        <div style={{fontSize:11,color:"var(--gray600)",fontStyle:"italic"}}>{exitAp.flightNote}</div>
+                        {latestSafeDep&&(
+                          <div style={{marginTop:10,background:"white",borderRadius:10,padding:"10px 12px",border:"1px solid #b91c1c20"}}>
+                            <div style={{fontSize:11,fontWeight:700,color:"#b91c1c",marginBottom:8}}>⏰ Your Departure Plan</div>
+                            <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,background:"#fff2f2",border:"1.5px solid #b91c1c",marginBottom:6}}>
+                              <span style={{fontSize:9,fontWeight:800,color:"white",background:"#b91c1c",padding:"1px 6px",borderRadius:100,flexShrink:0}}>LATEST</span>
+                              <span style={{fontSize:13,fontWeight:800,color:"#b91c1c"}}>{latestSafeDep.time}</span>
+                              <span style={{fontSize:10,color:"var(--gray400)"}}>→ arrives {exitPort} ~{latestSafeDep.arrive}</span>
+                              <span style={{marginLeft:"auto",fontSize:10,fontWeight:600,color:"#007a57"}}>{latestSafeDep.bufferLeft>=60?`+${Math.round(latestSafeDep.bufferLeft/60)}h buffer`:latestSafeDep.bufferLeft>0?`+${latestSafeDep.bufferLeft}m`:"⚠ Tight"}</span>
+                            </div>
+                            <div style={{fontSize:11,color:"var(--gray600)",lineHeight:1.8}}>
+                              <div>🏨 Leave hotel by <strong style={{color:"#b91c1c"}}>{hotelLeaveByDep}</strong></div>
+                              <div style={{fontSize:10,color:"var(--gray400)",fontStyle:"italic"}}>{exitPort==="NRT"?"Narita: allow 3h at airport":"Haneda: allow 2.5h at international terminal"}</div>
+                            </div>
+                          </div>
+                        )}
+                        <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                          <span style={{fontSize:18,fontWeight:800,color:"#0057FF"}}>${exitAp.toCity[tier].cost*2}</span>
+                          <span style={{fontSize:10,color:"var(--gray400)",alignSelf:"flex-end",marginLeft:4}}>2 pax</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Expense editor */}
+              <div className="card" style={{padding:24,marginBottom:16}}>
+                <div className="section-label">✏️ Edit Day {sel.dayNum} Expenses</div>
+                <EditRow label="🏨 Accommodation" value={c.ac} accent={cc} onSave={v=>setOv(sel,"accom",v)}/>
+                <EditRow label="🍜 Food & Drinks"  value={c.fo} accent={cc} onSave={v=>setOv(sel,"food",v)}/>
+                <EditRow label="🎟️ Activities"     value={c.av} accent={cc} onSave={v=>setOv(sel,"activities",v)}/>
+                <EditRow label="🚇 Local Transport" value={c.tr} accent={cc} onSave={v=>setOv(sel,"transport",v)}/>
+                {c.tn>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--gray100)"}}>
+                  <span style={{fontSize:13,color:"var(--gray600)",fontWeight:500}}>🚄 Intercity Train (2 pax)</span>
+                  <span style={{fontSize:15,fontWeight:700,color:sel.transition?.color||cc}}>${c.tn}</span>
+                </div>}
+                {c.en>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--gray100)"}}>
+                  <span style={{fontSize:13,color:"var(--gray600)",fontWeight:500}}>🛬 Transfer to {entryPort}</span>
+                  <span style={{fontSize:15,fontWeight:700,color:"#0057FF"}}>${c.en}</span>
+                </div>}
+                {c.ex>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--gray100)"}}>
+                  <span style={{fontSize:13,color:"var(--gray600)",fontWeight:500}}>🛫 Transfer to {exitPort} ({exitAp.name.split(" ")[0]})</span>
+                  <span style={{fontSize:15,fontWeight:700,color:"#0057FF"}}>${c.ex}</span>
+                </div>}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:14,marginTop:4}}>
+                  <span style={{fontSize:14,fontWeight:700}}>Day Total · 2 adults</span>
+                  <span style={{fontSize:22,fontWeight:900,color:cc}}>${c.total}</span>
+                </div>
+              </div>
+
+              {/* All days summary */}
+              <div className="card" style={{padding:24}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div className="section-label" style={{marginBottom:0}}>📊 All Days Overview</div>
+                  <div style={{fontSize:24,fontWeight:900,color:tc.h}}>${grandTotal.toLocaleString()}</div>
+                </div>
+                <div style={{maxHeight:260,overflowY:"auto"}}>
+                  {schedule.map((d,i)=>{
+                    const dc=costs(d),dcc=CC[d.city],isSel=i===selIdx;
+                    return(
+                      <div key={i} onClick={()=>setSelIdx(i)}
+                        style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderRadius:10,cursor:"pointer",marginBottom:4,transition:"background 0.15s",background:isSel?`${dcc}12`:"transparent",border:isSel?`1.5px solid ${dcc}30`:"1.5px solid transparent"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:32,height:32,borderRadius:10,background:isSel?dcc:`${dcc}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,transition:"background 0.15s"}}>{d.template.emoji}</div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:isSel?dcc:"var(--text)"}}>Day {d.dayNum} — {d.city} {d.isArrival?"🛬":""}{d.isDeparture?"🛫":""}</div>
+                            <div style={{fontSize:10,color:"var(--gray400)"}}>{d.template.theme}{d.transition?` · 🚄 from ${d.prevCity}`:""}</div>
+                          </div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:dcc}}>${dc.total}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{borderTop:"1.5px solid var(--gray100)",marginTop:12,paddingTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:12,color:"var(--gray600)",fontWeight:500}}>Grand Total · 2 adults · excl. flights</div>
+                    <div style={{fontSize:11,color:grandTotal<=budget?"#007a57":"#b91c1c",fontWeight:600,marginTop:2}}>{grandTotal<=budget?`✓ $${(budget-grandTotal).toLocaleString()} under budget`:`⚠ $${(grandTotal-budget).toLocaleString()} over budget`}</div>
+                  </div>
+                  <div style={{fontSize:30,fontWeight:900,color:tc.h}}>${grandTotal.toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+
+        {/* ── TAB: HOTELS & EATS ── */}
+        {activeTab==="recs"&&(
+          <div className="fade-up">
+            {/* City selector */}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+              {active.map(city=>{const cc=CC[city];return(
+                <button key={city} onClick={()=>setRecsCity(city)}
+                  style={{padding:"8px 18px",borderRadius:100,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,transition:"all 0.2s",background:recsCity===city?cc:"white",border:`1.5px solid ${recsCity===city?cc:cc+"40"}`,color:recsCity===city?"white":cc,boxShadow:recsCity===city?`0 4px 12px ${cc}40`:"var(--shadow)"}}>
+                  {CE[city]} {city}
+                </button>
+              );})}
+            </div>
+
+            {/* Hotels / Restaurants toggle */}
+            <div style={{display:"flex",gap:4,background:"white",borderRadius:12,padding:4,marginBottom:20,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)",width:"fit-content"}}>
+              {[{id:"hotels",label:"🏨 Hotels"},{id:"restaurants",label:"🍜 Restaurants"}].map(t=>(
+                <button key={t.id} onClick={()=>setRecsType(t.id)}
+                  style={{padding:"9px 20px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,transition:"all 0.2s",background:recsType===t.id?tc.h:"transparent",color:recsType===t.id?"white":"var(--gray400)"}}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tier context */}
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:tc.hbg,borderRadius:12,marginBottom:16,border:`1.5px solid ${tc.h}30`}}>
+              <span style={{fontSize:20}}>{tm.icon}</span>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:tc.h}}>{tm.label} tier · {recsCity}</div>
+                <div style={{fontSize:11,color:"var(--gray600)"}}>{tm.sub} · AI picks matched to your budget</div>
+              </div>
+              {(tripStartDate||tripEndDate)&&(
+                <div style={{marginLeft:"auto",fontSize:11,color:"var(--gray400)",textAlign:"right"}}>
+                  {tripStartDate&&<div>📅 Check-in: {tripStartDate}</div>}
+                  {tripEndDate&&<div>📅 Check-out: {tripEndDate}</div>}
+                </div>
+              )}
+            </div>
+
+            <AIRecs city={recsCity} tier={tier} type={recsType}
+              nights={cityNights[recsCity]||1}
+              checkIn={tripStartDate} checkOut={tripEndDate}/>
+          </div>
+        )}
+
+        {/* ── TAB: MAP ── */}
+        {activeTab==="map"&&(
+          <div className="fade-up">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+              {active.map(city=>{const cc=CC[city];return(
+                <button key={city} onClick={()=>setMapCity(city)}
+                  style={{padding:"8px 18px",borderRadius:100,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,transition:"all 0.2s",background:mapCity===city?cc:"white",border:`1.5px solid ${mapCity===city?cc:cc+"40"}`,color:mapCity===city?"white":cc,boxShadow:mapCity===city?`0 4px 12px ${cc}40`:"var(--shadow)"}}>
+                  {CE[city]} {city}
+                </button>
+              );})}
+            </div>
+            <div className="card" style={{overflow:"hidden",height:380,padding:0,marginBottom:16}}>
+              <LeafletMap city={mapCity}/>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+              {[["⛩️ Temple","#92600a"],["🎭 Attraction","#9333ea"],["🌿 Nature","#007a57"],["🚉 Station","#b91c1c"],["🏨 Hotel","#0057FF"]].map(([l,c])=>(
+                <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"var(--gray600)",background:"white",borderRadius:100,padding:"5px 12px",border:"1px solid var(--gray100)",boxShadow:"var(--shadow)"}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:c}}/>{l}
+                </div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {(CITY_MAPS[mapCity]?.spots||[]).map((spot,i)=>(
+                <div key={i} className="card" style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:`${{hotel:"#0057FF",temple:"#92600a",attraction:"#9333ea",nature:"#007a57",train:"#b91c1c"}[spot.type]}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                    {{hotel:"🏨",temple:"⛩️",attraction:"🎭",nature:"🌿",train:"🚉"}[spot.type]}
+                  </div>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600}}>{spot.name}</div>
+                    <div style={{fontSize:10,color:"var(--gray400)",textTransform:"capitalize"}}>{spot.type}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: TRAINS ── */}
+        {activeTab==="trains"&&(
+          <div className="fade-up">
+            <div className="section-label">✈️ YYZ ↔ Tokyo Flights</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:24}}>
+              {[{label:"🛬 Fly In",port:entryPort,ap:entryAp,dir:"YYZ → Tokyo",time:arrivalTime},{label:"🛫 Fly Out",port:exitPort,ap:exitAp,dir:"Tokyo → YYZ",time:departureTime}].map(item=>{
+                const info=item.ap.toCity[tier];
+                return(
+                  <div key={item.label} className="card" style={{padding:"18px 20px",borderTop:"4px solid #0057FF"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#0057FF",letterSpacing:1,marginBottom:8}}>{item.label} — {item.dir}</div>
+                    <div style={{fontSize:15,fontWeight:800,marginBottom:2}}>{item.port} — {item.ap.name}</div>
+                    <div style={{fontSize:11,color:"var(--gray400)",marginBottom:6}}>{item.ap.desc}</div>
+                    {item.time&&<div style={{fontSize:12,fontWeight:600,color:"#0057FF",marginBottom:6}}>🕐 {item.label.includes("In")?"Landing":"Departing"}: {item.time}</div>}
+                    <div style={{fontSize:12,color:"var(--gray600)",marginBottom:3}}>✈️ {item.ap.flightNote}</div>
+                    <div style={{fontSize:12,color:"var(--gray600)",marginBottom:3}}>🚌 {info.mode}</div>
+                    <div style={{fontSize:12,color:"var(--gray600)",marginBottom:12}}>⏱ {info.dur} to central Tokyo</div>
+                    {/* Next trains — smart if flight time set, else show sample */}
+                    <div style={{marginBottom:10}}>
+                      {item.label.includes("In") && arrivalTime ? (() => {
+                        const clr = fromMins(toMins(arrivalTime)+90);
+                        const opts = getNextTrains(info.trains, clr, parseDurMins(info.dur), 3);
+                        return (
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>
+                              TRAINS AFTER LANDING ({arrivalTime}) — CLEAR ~{clr}
+                            </div>
+                            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                              {opts.map((opt,i)=>(
+                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:10,background:i===0?"#e8f0ff":"var(--gray50)",border:i===0?"2px solid #0057FF":"1px solid var(--gray100)"}}>
+                                  {i===0 && <span style={{fontSize:9,fontWeight:800,color:"white",background:"#0057FF",padding:"2px 7px",borderRadius:100,flexShrink:0}}>CATCH THIS</span>}
+                                  {i>0  && <span style={{fontSize:9,color:"var(--gray400)",padding:"2px 7px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>+{toMins(opt.time)-toMins(opts[0].time)}m later</span>}
+                                  <span style={{fontSize:14,fontWeight:900,color:i===0?"#0057FF":"var(--gray600)",minWidth:44}}>{opt.time}</span>
+                                  <span style={{fontSize:11,color:"var(--gray400)"}}>→ arrives central Tokyo <strong>{opt.arrive}</strong></span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })() : item.label.includes("Out") && departureTime ? (() => {
+                        const bufM = exitPort==="NRT"?240:150;
+                        const ls = getLatestSafeTrain(info.trains, departureTime, parseDurMins(info.dur), bufM);
+                        const leaveHotel = ls ? fromMins(toMins(ls.time)-20) : null;
+                        return (
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>
+                              TRAINS FOR YOUR {departureTime} FLIGHT
+                            </div>
+                            {ls ? (
+                              <div>
+                                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:10,background:"#fff2f2",border:"2px solid #b91c1c",marginBottom:6}}>
+                                  <span style={{fontSize:9,fontWeight:800,color:"white",background:"#b91c1c",padding:"2px 7px",borderRadius:100,flexShrink:0}}>LATEST SAFE</span>
+                                  <span style={{fontSize:14,fontWeight:900,color:"#b91c1c",minWidth:44}}>{ls.time}</span>
+                                  <span style={{fontSize:11,color:"var(--gray400)"}}>→ arrives {exitPort} <strong>{ls.arrive}</strong></span>
+                                  <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:ls.bufferLeft>=60?"#007a57":ls.bufferLeft>0?"#92600a":"#b91c1c"}}>
+                                    {ls.bufferLeft>=60?`+${Math.round(ls.bufferLeft/60)}h spare`:ls.bufferLeft>0?`+${ls.bufferLeft}m spare`:"⚠ Very tight"}
+                                  </span>
+                                </div>
+                                <div style={{fontSize:11,color:"var(--gray600)",padding:"6px 0"}}>
+                                  🏨 Leave your hotel by <strong style={{color:"#b91c1c"}}>{leaveHotel}</strong> to reach the station in time
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{padding:"8px 12px",background:"#fff2f2",borderRadius:10,fontSize:11,color:"#b91c1c",fontWeight:600}}>
+                                ⚠ No safe train found for this flight time — consider private transfer or earlier flight
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>
+                            SAMPLE DEPARTURES — set flight time above for personalised trains ↑
+                          </div>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                            {info.trains.filter(t=>/^\d{2}:\d{2}$/.test(t)).slice(0,6).map((t,i)=>(
+                              <span key={i} style={{fontSize:11,padding:"3px 10px",borderRadius:100,background:"var(--sky)",color:"#0057FF",fontWeight:600}}>{t}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:10,borderTop:"1px solid var(--gray100)"}}>
+                      <span style={{fontSize:12,color:"var(--gray400)"}}>Transfer (2 pax)</span>
+                      <span style={{fontSize:20,fontWeight:900,color:"#0057FF"}}>${info.cost*2}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* JR Pass */}
+            <div style={{background:tier==="budget"?"#fff8e6":"#e8f0ff",border:`1.5px solid ${tier==="budget"?"#92600a40":"#0057FF30"}`,borderRadius:14,padding:"16px 20px",marginBottom:24}}>
+              <div style={{fontWeight:700,color:tier==="budget"?"#92600a":"#0057FF",marginBottom:6,fontSize:14}}>
+                {tier==="budget"?"⚠️ No JR Pass — paying per train":"✅ 14-day JR Pass covers all Shinkansen"}
+              </div>
+              <div style={{fontSize:13,color:"var(--gray600)",lineHeight:1.6}}>
+                {tier==="budget"?"At budget tier you pay per ride. JR Pass costs $860 for 2 adults — worth it with 3+ Shinkansen.":"JR Pass $860 for 2 adults, 14-day. Buy before leaving Canada — not sold inside Japan. Covers all bullet trains and NEX to Narita."}
+              </div>
+            </div>
+
+            {/* Outbound */}
+            <div className="section-label">🚄 Outbound Journey</div>
+            <div style={{background:"white",borderRadius:16,padding:"16px 20px",marginBottom:12,boxShadow:"var(--shadow)",border:"1px solid var(--gray100)"}}>
+              <div style={{fontSize:11,color:"var(--gray400)",marginBottom:12,fontWeight:600}}>YYZ ──✈──▶ {entryPort} → {active.join(" → ")}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                {active.map((city,i)=>{
+                  const cc=CC[city],next=active[i+1],tr=next?getTr(city,next):null;
+                  return[
+                    <div key={city} style={{textAlign:"center",flexShrink:0}}>
+                      <div style={{width:40,height:40,borderRadius:12,background:`${cc}18`,border:`2px solid ${cc}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,margin:"0 auto 4px"}}>{CE[city]}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:cc}}>{city}</div>
+                      <div style={{fontSize:9,color:"var(--gray400)"}}>{cityNights[city]}n</div>
+                    </div>,
+                    tr&&<div key={`t${i}`} style={{flex:1,minWidth:40,textAlign:"center"}}>
+                      <div style={{height:3,background:`${tr.color}40`,borderRadius:2,margin:"0 4px 4px"}}/>
+                      <div style={{fontSize:9,color:tr.color,fontWeight:600}}>{tr.dur}</div>
+                    </div>
+                  ];
+                })}
+              </div>
+            </div>
+
+            {active.map((city,i)=>{
+              if(i===0) return null;
+              const prev=active[i-1],tr=getTr(prev,city);
+              if(!tr) return null;
+              const pp=tr.perPerson[tier];
+              return(
+                <div key={city} className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:`4px solid ${tr.color}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                        <div style={{fontSize:13,fontWeight:700,color:CC[prev]}}>{CE[prev]} {prev}</div>
+                        <div style={{flex:1,height:2,background:`${tr.color}30`,borderRadius:1}}/>
+                        <div style={{fontSize:11,color:tr.color,fontWeight:600}}>→</div>
+                        <div style={{flex:1,height:2,background:`${tr.color}30`,borderRadius:1}}/>
+                        <div style={{fontSize:13,fontWeight:700,color:CC[city]}}>{CE[city]} {city}</div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:600,color:tr.color,marginBottom:3}}>🚄 {tr.line}</div>
+                      <div style={{fontSize:12,color:"var(--gray600)",marginBottom:8}}>⏱ {tr.dur} · {tr.note[tier]}</div>
+                      {/* Train timetable — recommended 3 from 08:00 (post-breakfast) */}
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>RECOMMENDED TRAINS (MORNING DEPARTURES)</div>
+                        {(() => {
+                          const durM = parseDurMins(tr.dur);
+                          const opts = getNextTrains(tr.trains||[], "08:00", durM, 3);
+                          if(!opts.length) return <span style={{fontSize:11,color:"var(--gray400)"}}>Check timetable locally</span>;
+                          return (
+                            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                              {opts.map((opt,i)=>(
+                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:10,background:i===0?`${tr.color}15`:"var(--gray50)",border:i===0?`2px solid ${tr.color}`:"1px solid var(--gray100)"}}>
+                                  {i===0 && <span style={{fontSize:9,fontWeight:800,color:"white",background:tr.color,padding:"2px 7px",borderRadius:100,flexShrink:0}}>BEST</span>}
+                                  {i>0  && <span style={{fontSize:9,color:"var(--gray400)",padding:"2px 7px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>+{toMins(opt.time)-toMins(opts[0].time)}m</span>}
+                                  <span style={{fontSize:14,fontWeight:900,color:i===0?tr.color:"var(--gray600)",minWidth:44}}>{opt.time}</span>
+                                  <span style={{fontSize:11,color:"var(--gray400)"}}>→ arrives <strong>{opt.arrive}</strong></span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
+                      <div style={{fontSize:22,fontWeight:900,color:pp===0?"#007a57":tr.color}}>{pp===0?"Covered":"$"+(pp*2)}</div>
+                      {pp>0?<div style={{fontSize:10,color:"var(--gray400)"}}>${pp}/person · 2 pax</div>
+                           :<div style={{fontSize:10,color:"#007a57",fontWeight:600}}>by JR Pass</div>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Return journey */}
+            {needsReturn&&RETURN_TRAINS[lastCity]&&(()=>{
+              const retTr=RETURN_TRAINS[lastCity],exitInfo=exitAp.toCity[tier],pp=retTr.perPerson[tier];
+              return(
+                <div style={{marginTop:8}}>
+                  <div className="section-label" style={{marginTop:24}}>🏠 Return — {lastCity} → {exitPort} → YYZ</div>
+                  <div className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:`4px solid ${retTr.color}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                          <div style={{fontSize:13,fontWeight:700,color:CC[lastCity]}}>{CE[lastCity]} {lastCity}</div>
+                          <div style={{flex:1,height:2,background:`${retTr.color}30`,borderRadius:1}}/>
+                          <div style={{fontSize:11,color:retTr.color}}>→</div>
+                          <div style={{flex:1,height:2,background:`${retTr.color}30`,borderRadius:1}}/>
+                          <div style={{fontSize:13,fontWeight:700,color:"#0057FF"}}>🗼 Tokyo</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:600,color:retTr.color,marginBottom:3}}>🚄 {retTr.line}</div>
+                        <div style={{fontSize:12,color:"var(--gray600)",marginBottom:8}}>⏱ {retTr.dur} · {retTr.note[tier]}</div>
+                        <div style={{background:"var(--sky)",borderRadius:10,padding:"10px 14px",marginBottom:8}}>
+                          <div style={{fontSize:11,fontWeight:700,color:"#0057FF",marginBottom:4}}>📋 Step-by-step to {exitPort}</div>
+                          <div style={{fontSize:12,color:"var(--gray600)",lineHeight:1.6}}>{retTr.tips[exitPort]}</div>
+                        </div>
+                        {/* Smart return trains: if departure flight set, compute latest safe; else show 3 from 06:00 */}
+                        {departureTime ? (() => {
+                          const bufMins = exitPort==="NRT"?240:150;
+                          const exitDurMins = parseDurMins(exitAp.toCity[tier].dur);
+                          // total time needed from lastCity: train dur + airport transfer + airport buffer
+                          const totalMins = parseDurMins(retTr.dur) + exitDurMins + (exitPort==="NRT"?180:150);
+                          const mustLeaveBy = fromMins(toMins(departureTime)-totalMins);
+                          const ls = getLatestSafeTrain(retTr.trains||[], mustLeaveBy, 0, 0); // leave by mustLeaveBy
+                          // find trains before mustLeaveBy
+                          const validT = (retTr.trains||[]).filter(t=>/^\d{2}:\d{2}$/.test(t));
+                          const safeTrs = validT.filter(t=>toMins(t)<=toMins(mustLeaveBy));
+                          const latestSafeReturn = safeTrs.length ? safeTrs[safeTrs.length-1] : null;
+                          const latestArr = latestSafeReturn ? fromMins(toMins(latestSafeReturn)+parseDurMins(retTr.dur)) : null;
+                          return (
+                            <div style={{marginTop:8}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>
+                                TRAINS TO CATCH FOR {departureTime} FLIGHT
+                              </div>
+                              {latestSafeReturn ? (
+                                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                                  {[...safeTrs].reverse().slice(0,3).reverse().map((t,i,arr)=>{
+                                    const isLatest = t===latestSafeReturn;
+                                    const arrT = fromMins(toMins(t)+parseDurMins(retTr.dur));
+                                    return(
+                                      <div key={t} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:10,background:isLatest?"#fff2f2":"var(--gray50)",border:isLatest?"2px solid #b91c1c":"1px solid var(--gray100)"}}>
+                                        {isLatest && <span style={{fontSize:9,fontWeight:800,color:"white",background:"#b91c1c",padding:"2px 7px",borderRadius:100,flexShrink:0}}>LATEST</span>}
+                                        {!isLatest && <span style={{fontSize:9,color:"var(--gray400)",padding:"2px 7px",borderRadius:100,background:"var(--gray100)",flexShrink:0}}>earlier</span>}
+                                        <span style={{fontSize:14,fontWeight:900,color:isLatest?"#b91c1c":"var(--gray600)",minWidth:44}}>{t}</span>
+                                        <span style={{fontSize:11,color:"var(--gray400)"}}>→ Tokyo <strong>{arrT}</strong></span>
+                                        {isLatest&&<span style={{marginLeft:"auto",fontSize:10,color:"#007a57",fontWeight:600}}>✓ makes flight</span>}
+                                      </div>
+                                    );
+                                  })}
+                                  <div style={{fontSize:11,color:"var(--gray600)",padding:"6px 2px"}}>
+                                    🏨 Leave {lastCity} no later than <strong style={{color:"#b91c1c"}}>{mustLeaveBy}</strong>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{padding:"8px 12px",background:"#fff2f2",borderRadius:10,fontSize:11,color:"#b91c1c",fontWeight:600}}>
+                                  ⚠ No train catches your {departureTime} flight — consider flying out of a closer city or earlier flight
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })() : (
+                          <div style={{marginTop:8}}>
+                            <div style={{fontSize:10,fontWeight:700,color:"var(--gray400)",marginBottom:6,letterSpacing:1}}>MORNING OPTIONS — set departure flight time for personalised trains</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                              {getNextTrains(retTr.trains||[],"07:00",parseDurMins(retTr.dur),3).map((opt,i)=>(
+                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:10,background:i===0?`${retTr.color}12`:"var(--gray50)",border:i===0?`2px solid ${retTr.color}`:"1px solid var(--gray100)"}}>
+                                  {i===0&&<span style={{fontSize:9,fontWeight:800,color:"white",background:retTr.color,padding:"2px 7px",borderRadius:100}}>FIRST</span>}
+                                  {i>0&&<span style={{fontSize:9,color:"var(--gray400)",padding:"2px 7px",borderRadius:100,background:"var(--gray100)"}}>+{toMins(opt.time)-toMins(getNextTrains(retTr.trains||[],"07:00",parseDurMins(retTr.dur),3)[0].time)}m</span>}
+                                  <span style={{fontSize:14,fontWeight:900,color:i===0?retTr.color:"var(--gray600)",minWidth:44}}>{opt.time}</span>
+                                  <span style={{fontSize:11,color:"var(--gray400)"}}>→ Tokyo ~{opt.arrive}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
+                        <div style={{fontSize:22,fontWeight:900,color:pp===0?"#007a57":retTr.color}}>{pp===0?"Covered":"$"+(pp*2)}</div>
+                        {pp>0?<div style={{fontSize:10,color:"var(--gray400)"}}>${pp}/person</div>:<div style={{fontSize:10,color:"#007a57",fontWeight:600}}>by JR Pass</div>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="card" style={{padding:"16px 20px",marginBottom:10,borderLeft:"4px solid #0057FF"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#0057FF",marginBottom:6}}>🚌 Tokyo City → {exitPort} — {exitInfo.mode}</div>
+                    <div style={{fontSize:12,color:"var(--gray600)",marginBottom:10}}>⏱ {exitInfo.dur} · then check in for YYZ flight</div>
+                    <div style={{background:"#fff2f2",borderRadius:10,padding:"10px 14px",border:"1px solid #b91c1c30"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#b91c1c",marginBottom:4}}>⏰ Allow enough time!</div>
+                      <div style={{fontSize:12,color:"var(--gray600)",lineHeight:1.6}}>{exitPort==="NRT"?"Narita is 60km out — arrive 3h before departure. Leave Tokyo 4–5h before flight.":"Haneda is close — arrive 2.5h before. Leave Tokyo 2–3h before flight."}</div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+                      <span style={{fontSize:12,color:"var(--gray400)"}}>Airport transfer (2 pax)</span>
+                      <span style={{fontSize:22,fontWeight:900,color:"#0057FF"}}>${exitInfo.cost*2}</span>
+                    </div>
+                  </div>
+                  <div style={{background:"linear-gradient(135deg,#0057FF18,#0057FF08)",border:"1.5px solid #0057FF30",borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--gray600)"}}>Total return journey · 2 adults</div>
+                      <div style={{fontSize:11,color:"var(--gray400)",marginTop:2}}>{lastCity} → Tokyo → {exitPort}</div>
+                      {pp===0&&<div style={{fontSize:11,color:"#007a57",fontWeight:600,marginTop:2}}>Train covered by JR Pass</div>}
+                    </div>
+                    <div style={{fontSize:26,fontWeight:900,color:"#0057FF"}}>${(pp*2+exitInfo.cost*2).toLocaleString()}</div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Transport summary */}
+            <div className="card" style={{padding:"18px 20px",marginTop:20}}>
+              <div className="section-label">📊 Full Transport Summary · 2 Adults</div>
+              {[
+                {label:`🛬 ${entryPort} arrival transfer`,val:entryAp.toCity[tier].cost*2,color:"#0057FF"},
+                {label:`🛫 ${exitPort} departure transfer`,val:exitAp.toCity[tier].cost*2,color:"#0057FF"},
+                {label:tier==="budget"?"Individual Shinkansen tickets":"14-day JR Pass × 2",
+                 val:tier==="budget"?schedule.reduce((s,d)=>s+(d.transition?d.transition.perPerson[tier]*2:0),0)+(needsReturn&&RETURN_TRAINS[lastCity]?RETURN_TRAINS[lastCity].perPerson[tier]*2:0):active.length>1?860:0,
+                 color:tier==="budget"?"#92600a":"#007a57"},
+                {label:"IC card / local metro (all days)",val:tier==="luxury"?0:Math.round(schedule.length*8),color:"var(--gray400)"},
+                ...(tier==="premium"?[{label:"Taxis & upgrades",val:160,color:"var(--gray400)"}]:[]),
+                ...(tier==="luxury"?[{label:"Private transfers (all)",val:800,color:"#9333ea"}]:[]),
+              ].map((item,i,arr)=>(
+                <div key={item.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,padding:"10px 0",borderBottom:i<arr.length-1?"1px solid var(--gray100)":"none",color:"var(--gray600)"}}>
+                  <span style={{fontWeight:500}}>{item.label}</span>
+                  <span style={{fontWeight:700,color:item.color||"var(--text)"}}>${item.val.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+      <div style={{textAlign:"center",padding:"20px 24px",borderTop:"1px solid var(--gray100)",color:"var(--gray400)",fontSize:11}}>
+        All costs USD · 2 adults · excl. flights · ~¥150/USD · October 2025 · Map © OpenStreetMap & CartoDB
+      </div>
+    </>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
